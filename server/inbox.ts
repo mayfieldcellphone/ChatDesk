@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { Readable } from 'node:stream';
 import {
   all, get, insertMessage, newId, normalizePhone, now, run,
-  type Business, type Contact, type Conversation, type Message, type SavedReply,
+  type Business, type Channel, type Contact, type Conversation, type Message, type SavedReply,
 } from './db';
 import { isVisitorOnline, publish, subscribe } from './events';
 import { requireAuth } from './auth';
@@ -10,13 +10,16 @@ import { isOpen, parseHours, validateHours, validTimezone } from './hours';
 import { emailConfigured } from './notify';
 import { aiConfigured, AiError, suggestReply } from './ai';
 import { rateLimit } from './rateLimit';
-import { fetchRecording, makeCall, sendSms, smsConfigured, twiml } from './twilio';
+import { fetchRecording, makeCall, smsConfigured, twiml } from './twilio';
+import { defaultChannel, DeliveryError, replyChannels, sendToCustomer } from './outbound';
+import { reviewLink } from './google';
 
 // Authenticated API for the team inbox. Every query is scoped to the signed-in user's business.
 export const inboxRouter = Router();
 inboxRouter.use(requireAuth);
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const CHANNELS: Channel[] = ['webchat', 'sms', 'facebook', 'instagram'];
 
 function publicBusiness(b: Business) {
   return {
@@ -40,6 +43,9 @@ function publicBusiness(b: Business) {
     voicemailGreeting: b.voicemail_greeting,
     missedCallTextEnabled: Boolean(b.missed_call_text_enabled),
     missedCallText: b.missed_call_text,
+    reviewLink: b.review_link,
+    reviewLinkEffective: reviewLink(b),
+    reviewRequestText: b.review_request_text,
   };
 }
 
@@ -86,6 +92,9 @@ inboxRouter.patch('/business', (req, res) => {
   const hoursEnabled = b.hoursEnabled === undefined ? business.hours_enabled : b.hoursEnabled ? 1 : 0;
   const voicemailGreeting = text(b.voicemailGreeting, business.voicemail_greeting, 500);
   const missedCallText = text(b.missedCallText, business.missed_call_text, 320);
+  const reviewRequestText = text(b.reviewRequestText, business.review_request_text, 500);
+  const reviewLinkValue = b.reviewLink === undefined ? business.review_link : String(b.reviewLink).trim() || null;
+  if (reviewLinkValue && !/^https:\/\/\S+$/.test(reviewLinkValue)) return res.status(400).json({ error: 'The review link must start with https://' });
   const missedCallTextEnabled =
     b.missedCallTextEnabled === undefined ? business.missed_call_text_enabled : b.missedCallTextEnabled ? 1 : 0;
   const ringSeconds = b.ringSeconds === undefined ? business.ring_seconds : Math.round(Number(b.ringSeconds));
@@ -117,6 +126,7 @@ inboxRouter.patch('/business', (req, res) => {
   if (!awayMessage) return res.status(400).json({ error: 'Away message is required' });
   if (!voicemailGreeting) return res.status(400).json({ error: 'Voicemail greeting is required' });
   if (!missedCallText) return res.status(400).json({ error: 'Missed-call text is required' });
+  if (!reviewRequestText.includes('{link}')) return res.status(400).json({ error: 'The review request needs {link} where the review link goes' });
   if (forwardNumber && forwardNumber === smsNumber) {
     return res.status(400).json({ error: 'The number to ring can’t be your Twilio number itself' });
   }
@@ -129,9 +139,9 @@ inboxRouter.patch('/business', (req, res) => {
   run(
     `UPDATE businesses SET name = ?, greeting = ?, color = ?, sms_number = ?, hours_enabled = ?, timezone = ?,
        hours = ?, away_message = ?, ai_notes = ?, forward_number = ?, ring_seconds = ?, voicemail_greeting = ?,
-       missed_call_text_enabled = ?, missed_call_text = ? WHERE id = ?`,
+       missed_call_text_enabled = ?, missed_call_text = ?, review_link = ?, review_request_text = ? WHERE id = ?`,
     name, greeting, color, smsNumber, hoursEnabled, timezone, hours, awayMessage, aiNotes,
-    forwardNumber, ringSeconds, voicemailGreeting, missedCallTextEnabled, missedCallText, businessId,
+    forwardNumber, ringSeconds, voicemailGreeting, missedCallTextEnabled, missedCallText, reviewLinkValue, reviewRequestText, businessId,
   );
   res.json({ business: publicBusiness(loadBusiness(businessId)) });
 });
@@ -243,6 +253,8 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       createdAt: conversation.created_at,
       online: isVisitorOnline(conversation.id),
       contact: { id: contact.id, name: contact.name, phone: contact.phone, email: contact.email },
+      replyChannels: replyChannels(loadBusiness(businessId), conversation, contact),
+      defaultChannel: defaultChannel(loadBusiness(businessId), conversation, contact),
     },
     messages: loadMessages(conversation.id),
   });
@@ -254,33 +266,48 @@ inboxRouter.post('/conversations/:id/messages', async (req, res) => {
   if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
 
   const body = String(req.body.body ?? '').trim();
-  const channel = req.body.channel === 'sms' ? 'sms' : 'webchat';
+  const channel = String(req.body.channel ?? '') as Channel;
   if (!body) return res.status(400).json({ error: 'Message is empty' });
   if (body.length > 1600) return res.status(400).json({ error: 'Message is too long (1600 characters max)' });
+  if (!CHANNELS.includes(channel)) return res.status(400).json({ error: 'Choose how to send the reply' });
 
-  if (channel === 'sms') {
-    const business = loadBusiness(businessId);
-    const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
-    if (!smsConfigured() || !business.sms_number) return res.status(400).json({ error: 'Texting is not set up. Add your SMS number in Settings.' });
-    if (!contact.phone) return res.status(400).json({ error: 'This contact has no mobile number' });
-    try {
-      await sendSms(business.sms_number, contact.phone, body);
-    } catch (err) {
-      return res.status(502).json({ error: `Text not sent: ${(err as Error).message}` });
-    }
-  } else if (conversation.channel === 'sms' && !conversation.visitor_token) {
-    return res.status(400).json({ error: 'This customer texted in, so reply by text' });
-  }
-
-  const message = insertMessage(conversation, 'out', channel, body, { authorId: userId });
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
-  const full = { ...message, author_name: author?.name ?? null };
-  publish(`biz:${businessId}`, { type: 'message', conversationId: conversation.id, message: full });
-  publish(`conv:${conversation.id}`, {
-    type: 'message',
-    message: { id: message.id, direction: 'out', body: message.body, created_at: message.created_at },
-  });
-  res.status(201).json({ message: full });
+  try {
+    const message = await sendToCustomer(loadBusiness(businessId), conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
+    res.status(201).json({ message });
+  } catch (err) {
+    if (err instanceof DeliveryError) return res.status(err.message.includes('not sent') ? 502 : 400).json({ error: err.message });
+    console.error('Reply failed:', err);
+    res.status(500).json({ error: 'Could not send the reply. Try again.' });
+  }
+});
+
+// Texts or messages the customer your Google review link (Birdeye's "review request").
+inboxRouter.post('/conversations/:id/review-request', async (req, res) => {
+  const { businessId, userId } = req.session!;
+  const conversation = loadConversation(businessId, req.params.id);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+  const business = loadBusiness(businessId);
+  const link = reviewLink(business);
+  if (!link) return res.status(400).json({ error: 'Connect your Google Business Profile, or add your review link on the Reviews page.' });
+
+  const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
+  const channel = CHANNELS.includes(req.body.channel) ? (req.body.channel as Channel) : defaultChannel(business, conversation, contact);
+  if (!channel) return res.status(400).json({ error: 'There’s no way to message this customer.' });
+  const first = contact.name.trim().split(/\s+/)[0];
+  const body = business.review_request_text
+    .replace(/\{name\}/gi, /^\+?\d[\d\s]+$/.test(first) ? 'there' : first)
+    .replace(/\{business\}/gi, business.name)
+    .replace(/\{link\}/gi, link);
+  const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
+  try {
+    const message = await sendToCustomer(business, conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
+    res.status(201).json({ message });
+  } catch (err) {
+    if (err instanceof DeliveryError) return res.status(400).json({ error: err.message });
+    console.error('Review request failed:', err);
+    res.status(500).json({ error: 'Could not send the review request. Try again.' });
+  }
 });
 
 inboxRouter.patch('/contacts/:id', (req, res) => {

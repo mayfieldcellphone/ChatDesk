@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
-import { all, get, now, run, type Business, type Conversation, type Message } from './db';
+import { all, get, now, run, type Business, type Conversation, type Message, type Review } from './db';
 import { subscriberCount } from './events';
 
 const ALERT_REPEAT_MS = 15 * 60 * 1000;
@@ -54,5 +54,29 @@ export async function emailTeam(business: Business, conversation: Conversation, 
     to: recipients.map((r) => r.email),
     subject,
     text: `${intro}${body}${link}\n\nYou're getting this because nobody had the inbox open. Turn these emails off in Settings.`,
+  });
+}
+
+/** Emails everyone who wants alerts about new Google reviews. Low ratings are called out in the subject. */
+export async function emailReviewAlert(business: Business, reviews: Review[]) {
+  const mailer = getTransport();
+  if (!mailer || reviews.length === 0) return;
+  const recipients = all<{ email: string }>('SELECT email FROM users WHERE business_id = ? AND notify_email = 1', business.id);
+  if (recipients.length === 0) return;
+
+  const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);
+  const low = reviews.some((r) => r.rating > 0 && r.rating <= 3);
+  const subject =
+    reviews.length === 1
+      ? `${low ? 'Needs attention: ' : ''}New ${reviews[0].rating}-star Google review from ${reviews[0].author_name.replace(/[\r\n]+/g, ' ')}`
+      : `${reviews.length} new Google reviews${low ? ' (including a low rating)' : ''}`;
+  const lines = reviews.map((r) => `${stars(r.rating)}  ${r.author_name}\n${r.comment || '(no comment, rating only)'}`);
+  const link = process.env.PUBLIC_URL ? `\n\nReply in ChatDesk: ${process.env.PUBLIC_URL.replace(/\/$/, '')}/?view=reviews` : '';
+
+  await mailer.sendMail({
+    from: process.env.SMTP_FROM,
+    to: recipients.map((r) => r.email),
+    subject,
+    text: `${business.name} has new reviews on Google:\n\n${lines.join('\n\n')}${link}\n\nTurn these emails off in Settings.`,
   });
 }

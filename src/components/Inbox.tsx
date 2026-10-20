@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, timeAgo, type Business, type ConversationSummary, type InboxEvent } from '../api';
+import { api, CHANNEL_LABELS, timeAgo, type Business, type ConversationSummary, type InboxEvent } from '../api';
 import { desktopAlertsSupported, playChime, showDesktopAlert } from '../alerts';
 import Thread from './Thread';
 
@@ -139,7 +139,7 @@ export default function Inbox({ business, onOpenSettings }: Props) {
                     {c.lastMessage}
                   </span>
                   <span className="ml-auto shrink-0 rounded bg-slate-100 px-1.5 text-[10px] uppercase text-slate-500">
-                    {c.channel === 'sms' ? 'Text' : 'Chat'}
+                    {CHANNEL_LABELS[c.channel]}
                   </span>
                   {c.unreadCount > 0 && (
                     <span className="shrink-0 rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white">{c.unreadCount}</span>

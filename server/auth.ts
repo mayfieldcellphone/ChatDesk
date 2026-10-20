@@ -45,20 +45,37 @@ function setSession(res: Response, session: Session) {
   });
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+/** Signs the OAuth `state` parameter so a callback can't be forged or replayed into another business. */
+export function signOAuthState(payload: { businessId: string; userId: string; provider: string }) {
+  return jwt.sign({ ...payload, nonce: crypto.randomBytes(8).toString('hex') }, secret, { expiresIn: '15m' });
+}
+
+export function verifyOAuthState(state: string) {
+  try {
+    return jwt.verify(state, secret) as { businessId: string; userId: string; provider: string };
+  } catch {
+    return null;
+  }
+}
+
+/** The signed-in session from the cookie, or null. */
+export function readSession(req: Request): Session | null {
   const token = readCookie(req, COOKIE);
-  if (!token) return res.status(401).json({ error: 'Not signed in' });
+  if (!token) return null;
   try {
     const { userId, businessId } = jwt.verify(token, secret) as Session;
     // The user may have been deleted since the cookie was issued.
-    if (!get('SELECT id FROM users WHERE id = ? AND business_id = ?', userId, businessId)) {
-      return res.status(401).json({ error: 'Not signed in' });
-    }
-    req.session = { userId, businessId };
-    next();
+    return get('SELECT id FROM users WHERE id = ? AND business_id = ?', userId, businessId) ? { userId, businessId } : null;
   } catch {
-    res.status(401).json({ error: 'Not signed in' });
+    return null;
   }
+}
+
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const session = readSession(req);
+  if (!session) return res.status(401).json({ error: 'Not signed in' });
+  req.session = session;
+  next();
 }
 
 export const authRouter = Router();

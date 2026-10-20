@@ -8,7 +8,8 @@ import { isOpen } from './hours';
 import { onInboundMessage } from './inbound';
 import { emailTeam } from './notify';
 import { phoneConversation } from './phone';
-import { publicUrl, sendSms, twiml, verifyTwilio } from './twilio';
+import { replyChannels, sendToCustomer } from './outbound';
+import { publicUrl, twiml, verifyTwilio } from './twilio';
 
 // Twilio Voice webhooks. Point the number's "A call comes in" at /api/voice/incoming and
 // "Call status changes" at /api/voice/status. The other URLs are handed to Twilio in the TwiML below.
@@ -167,13 +168,11 @@ voiceRouter.post('/status', (req, res) => {
 
 /** Texts the caller back after a missed call (Birdeye-style), at most once an hour per conversation. */
 async function sendMissedCallText(business: Business, conversation: Conversation & { last_missed_text_at: string | null }) {
-  if (!business.missed_call_text_enabled || !business.sms_number) return;
+  if (!business.missed_call_text_enabled) return;
   if (conversation.last_missed_text_at && Date.now() - Date.parse(conversation.last_missed_text_at) < MISSED_TEXT_REPEAT_MS) return;
-  const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id);
-  if (!contact?.phone) return;
+  const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
+  if (!replyChannels(business, conversation, contact).includes('sms')) return;
 
   run('UPDATE conversations SET last_missed_text_at = ? WHERE id = ?', now(), conversation.id);
-  await sendSms(business.sms_number, contact.phone, business.missed_call_text);
-  const message = insertMessage(conversation, 'out', 'sms', business.missed_call_text, { automated: true });
-  publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: { ...message, author_name: null } });
+  await sendToCustomer(business, conversation, 'sms', business.missed_call_text, { automated: true });
 }

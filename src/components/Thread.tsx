@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, fillReply, type Business, type Channel, type ConversationDetail, type InboxEvent, type Message, type SavedReply } from '../api';
+import { api, CHANNEL_LABELS, fillReply, type Business, type Channel, type ConversationDetail, type InboxEvent, type Message, type SavedReply } from '../api';
 
 interface Props {
   conversationId: string;
@@ -39,7 +39,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
     load()
       .then((c) => {
         // Default to whichever channel the customer can see: chat while they're on the site, otherwise text.
-        setChannel(c.channel === 'sms' || (!c.online && canText(c)) ? 'sms' : 'webchat');
+        if (c.defaultChannel) setChannel(c.defaultChannel);
         onChanged();
       })
       .catch((err) => setError(err.message));
@@ -64,9 +64,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
     bottom.current?.scrollIntoView({ block: 'end' });
   }, [messages.length]);
 
-  const canText = (c: ConversationDetail) => Boolean(business.smsAvailable && business.smsNumber && c.contact.phone);
   // A conversation that started by text has no widget session to deliver chat replies to.
-  const canChat = (c: ConversationDetail) => c.channel === 'webchat' || messages.some((m) => m.channel === 'webchat');
 
   const send = async (e?: FormEvent) => {
     e?.preventDefault();
@@ -140,6 +138,22 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
     }
   };
 
+  const requestReview = async () => {
+    setError('');
+    if (!business.reviewLinkEffective) {
+      setError('Connect your Google Business Profile (Integrations), or add your review link on the Reviews page.');
+      return;
+    }
+    if (!confirm(`Send ${conversation?.contact.name} your review link by ${channel === 'webchat' ? 'web chat' : CHANNEL_LABELS[channel]}?`)) return;
+    try {
+      const { message } = await api<{ message: Message }>(`/conversations/${conversationId}/review-request`, { method: 'POST', body: { channel } });
+      setMessages((list) => (list.some((m) => m.id === message.id) ? list : [...list, message]));
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const callBack = async () => {
     setError('');
     setCalling('Starting call…');
@@ -165,8 +179,6 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
   }
 
   const { contact } = conversation;
-  const textable = canText(conversation);
-  const chattable = canChat(conversation);
 
   return (
     <div className="flex h-full flex-col">
@@ -262,7 +274,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
               </div>
               <div className={`mt-1 text-[11px] text-slate-400 ${m.direction === 'out' ? 'text-right' : ''}`}>
                 {m.automated ? 'Sent automatically · ' : m.direction === 'out' && m.author_name ? `${m.author_name} · ` : ''}
-                {m.channel === 'sms' ? 'Text' : 'Chat'} · {new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                {CHANNEL_LABELS[m.channel]} · {new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
               </div>
             </div>
           </div>
@@ -315,23 +327,19 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
         )}
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs [&_button]:whitespace-nowrap">
           <span className="text-slate-500">Reply by</span>
-          <button
-            type="button"
-            disabled={!chattable}
-            onClick={() => setChannel('webchat')}
-            className={`rounded-full px-3 py-1 ${channel === 'webchat' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'} disabled:opacity-40`}
-          >
-            Web chat
-          </button>
-          <button
-            type="button"
-            disabled={!textable}
-            onClick={() => setChannel('sms')}
-            title={textable ? undefined : 'Add your Twilio number in Settings to reply by text'}
-            className={`rounded-full px-3 py-1 ${channel === 'sms' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'} disabled:opacity-40`}
-          >
-            Text {contact.phone ?? ''}
-          </button>
+          {conversation.replyChannels.length === 0 && (
+            <span className="text-amber-600">No way to reply yet: set up texting in Settings, or connect this customer’s channel under Integrations.</span>
+          )}
+          {conversation.replyChannels.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setChannel(c)}
+              className={`rounded-full px-3 py-1 ${channel === c ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+            >
+              {c === 'webchat' ? 'Web chat' : c === 'sms' ? `Text ${contact.phone ?? ''}` : CHANNEL_LABELS[c]}
+            </button>
+          ))}
           {channel === 'webchat' && !conversation.online && (
             <span className="text-amber-600">They'll see this next time they open your website.</span>
           )}
@@ -346,6 +354,15 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
               title="Insert a saved reply (or type / in the box)"
             >
               Saved replies
+            </button>
+            <button
+              type="button"
+              onClick={requestReview}
+              disabled={conversation.replyChannels.length === 0}
+              className="rounded-full bg-amber-100 px-3 py-1 text-amber-800 hover:bg-amber-200 disabled:opacity-40"
+              title={business.reviewLinkEffective ? 'Send your Google review link to this customer' : 'Connect Google Business Profile or add a review link first (Reviews page)'}
+            >
+              ⭐ Ask for review
             </button>
             {business.aiAvailable && (
               <button

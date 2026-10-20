@@ -1,8 +1,8 @@
-import { get, insertMessage, now, run, type Business, type Conversation, type Message } from './db';
+import { get, now, run, type Business, type Contact, type Conversation, type Message } from './db';
 import { publish } from './events';
 import { isOpen } from './hours';
 import { emailTeam } from './notify';
-import { sendSms, smsConfigured } from './twilio';
+import { replyChannels, sendToCustomer } from './outbound';
 
 const AWAY_REPEAT_MS = 12 * 60 * 60 * 1000;
 
@@ -23,20 +23,10 @@ async function sendAwayMessageIfClosed(business: Business, conversation: Convers
   if (!fresh) return;
   if (fresh.last_auto_reply_at && Date.now() - Date.parse(fresh.last_auto_reply_at) < AWAY_REPEAT_MS) return;
 
-  if (fresh.channel === 'sms') {
-    const contact = get<{ phone: string | null }>('SELECT phone FROM contacts WHERE id = ?', fresh.contact_id);
-    if (!smsConfigured() || !business.sms_number || !contact?.phone) return;
-    // Claim the slot before the network call so a burst of texts doesn't send several away messages.
-    run('UPDATE conversations SET last_auto_reply_at = ? WHERE id = ?', now(), fresh.id);
-    await sendSms(business.sms_number, contact.phone, business.away_message);
-  } else {
-    run('UPDATE conversations SET last_auto_reply_at = ? WHERE id = ?', now(), fresh.id);
-  }
-
-  const message = insertMessage(fresh, 'out', fresh.channel, business.away_message, { automated: true });
-  publish(`biz:${business.id}`, { type: 'message', conversationId: fresh.id, message: { ...message, author_name: null } });
-  publish(`conv:${fresh.id}`, {
-    type: 'message',
-    message: { id: message.id, direction: 'out', body: message.body, created_at: message.created_at },
-  });
+  // Reply on the channel the customer just used.
+  const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', fresh.contact_id)!;
+  if (!replyChannels(business, fresh, contact).includes(fresh.channel)) return;
+  // Claim the slot before the network call so a burst of messages doesn't send several away messages.
+  run('UPDATE conversations SET last_auto_reply_at = ? WHERE id = ?', now(), fresh.id);
+  await sendToCustomer(business, fresh, fresh.channel, business.away_message, { automated: true });
 }

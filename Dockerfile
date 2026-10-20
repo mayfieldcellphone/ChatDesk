@@ -13,4 +13,5 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server
 COPY package.json ./
 EXPOSE 3000
-CMD ["node", "dist-server/index.js"]
+# node:sqlite is stable in practice but still prints an "experimental" warning on every start.
+CMD ["node", "--disable-warning=ExperimentalWarning", "dist-server/index.js"]

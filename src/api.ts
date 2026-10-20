@@ -19,6 +19,10 @@ export interface Business {
   voicemailGreeting: string;
   missedCallTextEnabled: boolean;
   missedCallText: string;
+  reviewLink: string | null;
+  /** The link review requests use: the owner's own, or the one from Google Business Profile. */
+  reviewLinkEffective: string | null;
+  reviewRequestText: string;
 }
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -42,7 +46,9 @@ export function fillReply(body: string, contactName: string, businessName: strin
   return body.replace(/\{name\}/gi, first).replace(/\{business\}/gi, businessName);
 }
 
-export type Channel = 'webchat' | 'sms';
+export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram';
+
+export const CHANNEL_LABELS: Record<Channel, string> = { webchat: 'Chat', sms: 'Text', facebook: 'Messenger', instagram: 'Instagram' };
 
 export interface ConversationSummary {
   id: string;
@@ -77,6 +83,8 @@ export interface ConversationDetail {
   createdAt: string;
   online: boolean;
   contact: { id: string; name: string; phone: string | null; email: string | null };
+  replyChannels: Channel[];
+  defaultChannel: Channel | null;
 }
 
 /** Events pushed over /api/stream. */
@@ -86,7 +94,8 @@ export type InboxEvent =
   | { type: 'read'; conversationId: string }
   | { type: 'contact'; contactId: string; conversationId?: undefined }
   | { type: 'status'; conversationId: string; status: 'open' | 'closed' }
-  | { type: 'presence'; conversationId: string; online: boolean };
+  | { type: 'presence'; conversationId: string; online: boolean }
+  | { type: 'review'; count: number; conversationId?: undefined };
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
