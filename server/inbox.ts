@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Readable } from 'node:stream';
 import {
   all, get, insertMessage, newId, normalizePhone, now, run,
   type Business, type Contact, type Conversation, type Message, type SavedReply,
@@ -9,7 +10,7 @@ import { isOpen, parseHours, validateHours, validTimezone } from './hours';
 import { emailConfigured } from './notify';
 import { aiConfigured, AiError, suggestReply } from './ai';
 import { rateLimit } from './rateLimit';
-import { sendSms, smsConfigured } from './twilio';
+import { fetchRecording, makeCall, sendSms, smsConfigured, twiml } from './twilio';
 
 // Authenticated API for the team inbox. Every query is scoped to the signed-in user's business.
 export const inboxRouter = Router();
@@ -34,6 +35,11 @@ function publicBusiness(b: Business) {
     aiNotes: b.ai_notes,
     aiAvailable: aiConfigured(),
     emailAvailable: emailConfigured(),
+    forwardNumber: b.forward_number,
+    ringSeconds: b.ring_seconds,
+    voicemailGreeting: b.voicemail_greeting,
+    missedCallTextEnabled: Boolean(b.missed_call_text_enabled),
+    missedCallText: b.missed_call_text,
   };
 }
 
@@ -41,19 +47,27 @@ const loadBusiness = (id: string) => get<Business>('SELECT * FROM businesses WHE
 
 inboxRouter.get('/me', (req, res) => {
   const { userId, businessId } = req.session!;
-  const user = get<{ id: string; name: string; email: string; notify_email: number }>(
-    'SELECT id, name, email, notify_email FROM users WHERE id = ?',
+  const user = get<{ id: string; name: string; email: string; notify_email: number; phone: string | null }>(
+    'SELECT id, name, email, notify_email, phone FROM users WHERE id = ?',
     userId,
   )!;
   res.json({
-    user: { id: user.id, name: user.name, email: user.email, notifyEmail: Boolean(user.notify_email) },
+    user: { id: user.id, name: user.name, email: user.email, notifyEmail: Boolean(user.notify_email), phone: user.phone },
     business: publicBusiness(loadBusiness(businessId)),
   });
 });
 
 inboxRouter.patch('/me', (req, res) => {
-  if (typeof req.body.notifyEmail !== 'boolean') return res.status(400).json({ error: 'notifyEmail must be true or false' });
-  run('UPDATE users SET notify_email = ? WHERE id = ?', req.body.notifyEmail ? 1 : 0, req.session!.userId);
+  const { userId } = req.session!;
+  if (req.body.notifyEmail !== undefined) {
+    if (typeof req.body.notifyEmail !== 'boolean') return res.status(400).json({ error: 'notifyEmail must be true or false' });
+    run('UPDATE users SET notify_email = ? WHERE id = ?', req.body.notifyEmail ? 1 : 0, userId);
+  }
+  if (req.body.phone !== undefined) {
+    const phone = req.body.phone ? normalizePhone(String(req.body.phone)) : null;
+    if (req.body.phone && !phone) return res.status(400).json({ error: 'Enter a valid mobile number' });
+    run('UPDATE users SET phone = ? WHERE id = ?', phone, userId);
+  }
   res.json({ ok: true });
 });
 
@@ -70,6 +84,20 @@ inboxRouter.patch('/business', (req, res) => {
   const color = b.color === undefined ? business.color : String(b.color);
   const timezone = b.timezone === undefined ? business.timezone : String(b.timezone);
   const hoursEnabled = b.hoursEnabled === undefined ? business.hours_enabled : b.hoursEnabled ? 1 : 0;
+  const voicemailGreeting = text(b.voicemailGreeting, business.voicemail_greeting, 500);
+  const missedCallText = text(b.missedCallText, business.missed_call_text, 320);
+  const missedCallTextEnabled =
+    b.missedCallTextEnabled === undefined ? business.missed_call_text_enabled : b.missedCallTextEnabled ? 1 : 0;
+  const ringSeconds = b.ringSeconds === undefined ? business.ring_seconds : Math.round(Number(b.ringSeconds));
+  if (!Number.isFinite(ringSeconds) || ringSeconds < 5 || ringSeconds > 60) {
+    return res.status(400).json({ error: 'Ring time must be between 5 and 60 seconds' });
+  }
+
+  let forwardNumber = business.forward_number;
+  if (b.forwardNumber !== undefined) {
+    forwardNumber = b.forwardNumber ? normalizePhone(String(b.forwardNumber)) : null;
+    if (b.forwardNumber && !forwardNumber) return res.status(400).json({ error: 'Enter a valid number to ring' });
+  }
 
   let hours = business.hours;
   if (b.hours !== undefined) {
@@ -87,6 +115,11 @@ inboxRouter.patch('/business', (req, res) => {
   if (!name) return res.status(400).json({ error: 'Business name is required' });
   if (!greeting) return res.status(400).json({ error: 'Greeting is required' });
   if (!awayMessage) return res.status(400).json({ error: 'Away message is required' });
+  if (!voicemailGreeting) return res.status(400).json({ error: 'Voicemail greeting is required' });
+  if (!missedCallText) return res.status(400).json({ error: 'Missed-call text is required' });
+  if (forwardNumber && forwardNumber === smsNumber) {
+    return res.status(400).json({ error: 'The number to ring can’t be your Twilio number itself' });
+  }
   if (!HEX_COLOR.test(color)) return res.status(400).json({ error: 'Colour must be a hex value like #2563eb' });
   if (!validTimezone(timezone)) return res.status(400).json({ error: 'Unknown timezone' });
   if (smsNumber && get('SELECT id FROM businesses WHERE sms_number = ? AND id != ?', smsNumber, businessId)) {
@@ -95,8 +128,10 @@ inboxRouter.patch('/business', (req, res) => {
 
   run(
     `UPDATE businesses SET name = ?, greeting = ?, color = ?, sms_number = ?, hours_enabled = ?, timezone = ?,
-       hours = ?, away_message = ?, ai_notes = ? WHERE id = ?`,
-    name, greeting, color, smsNumber, hoursEnabled, timezone, hours, awayMessage, aiNotes, businessId,
+       hours = ?, away_message = ?, ai_notes = ?, forward_number = ?, ring_seconds = ?, voicemail_greeting = ?,
+       missed_call_text_enabled = ?, missed_call_text = ? WHERE id = ?`,
+    name, greeting, color, smsNumber, hoursEnabled, timezone, hours, awayMessage, aiNotes,
+    forwardNumber, ringSeconds, voicemailGreeting, missedCallTextEnabled, missedCallText, businessId,
   );
   res.json({ business: publicBusiness(loadBusiness(businessId)) });
 });
@@ -237,7 +272,7 @@ inboxRouter.post('/conversations/:id/messages', async (req, res) => {
     return res.status(400).json({ error: 'This customer texted in, so reply by text' });
   }
 
-  const message = insertMessage(conversation, 'out', channel, body, userId);
+  const message = insertMessage(conversation, 'out', channel, body, { authorId: userId });
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
   const full = { ...message, author_name: author?.name ?? null };
   publish(`biz:${businessId}`, { type: 'message', conversationId: conversation.id, message: full });
@@ -246,6 +281,75 @@ inboxRouter.post('/conversations/:id/messages', async (req, res) => {
     message: { id: message.id, direction: 'out', body: message.body, created_at: message.created_at },
   });
   res.status(201).json({ message: full });
+});
+
+inboxRouter.patch('/contacts/:id', (req, res) => {
+  const { businessId } = req.session!;
+  const contact = get<Contact>('SELECT * FROM contacts WHERE id = ? AND business_id = ?', req.params.id, businessId);
+  if (!contact) return res.status(404).json({ error: 'Contact not found' });
+  const name = String(req.body.name ?? '').trim().slice(0, 100);
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+  run('UPDATE contacts SET name = ? WHERE id = ?', name, contact.id);
+  publish(`biz:${businessId}`, { type: 'contact', contactId: contact.id });
+  res.json({ contact: { id: contact.id, name, phone: contact.phone, email: contact.email } });
+});
+
+// Click-to-call: Twilio rings the staff member's phone, then connects them to the customer, who
+// sees the business number as caller ID.
+inboxRouter.post('/conversations/:id/call', async (req, res) => {
+  const { businessId, userId } = req.session!;
+  const conversation = loadConversation(businessId, req.params.id);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+
+  const business = loadBusiness(businessId);
+  const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
+  const user = get<{ name: string; phone: string | null }>('SELECT name, phone FROM users WHERE id = ?', userId)!;
+  const staffPhone = user.phone || business.forward_number;
+  if (!smsConfigured() || !business.sms_number) return res.status(400).json({ error: 'Calling is not set up. Add your Twilio number in Settings.' });
+  if (!contact.phone) return res.status(400).json({ error: 'This contact has no phone number' });
+  if (!staffPhone) return res.status(400).json({ error: 'Add your mobile number under Settings → Phone calls so we know which phone to ring.' });
+
+  try {
+    await makeCall(
+      business.sms_number,
+      staffPhone,
+      twiml`<Say>Connecting you to ${contact.name}.</Say><Dial callerId="${business.sms_number}"><Number>${contact.phone}</Number></Dial>`,
+    );
+  } catch (err) {
+    return res.status(502).json({ error: `Call not started: ${(err as Error).message}` });
+  }
+
+  const message = insertMessage(conversation, 'out', 'sms', `${user.name} called ${contact.name} back`, { authorId: userId, kind: 'call' });
+  const full = { ...message, author_name: user.name };
+  publish(`biz:${businessId}`, { type: 'message', conversationId: conversation.id, message: full });
+  res.status(201).json({ message: full, ringing: staffPhone });
+});
+
+// Streams a voicemail's audio from Twilio, so recordings stay private to signed-in staff.
+inboxRouter.get('/recordings/:messageId', async (req, res) => {
+  const message = get<{ recording_sid: string | null }>(
+    `SELECT m.recording_sid FROM messages m JOIN conversations c ON c.id = m.conversation_id
+      WHERE m.id = ? AND c.business_id = ? AND m.kind = 'voicemail'`,
+    req.params.messageId, req.session!.businessId,
+  );
+  if (!message?.recording_sid) return res.status(404).json({ error: 'Recording not found' });
+  if (!smsConfigured()) return res.status(503).json({ error: 'Twilio is not configured' });
+
+  try {
+    const upstream = await fetchRecording(message.recording_sid, req.get('Range'));
+    if (!upstream.ok || !upstream.body) return res.status(502).json({ error: 'Could not load the recording from Twilio' });
+    res.status(upstream.status);
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'private, max-age=3600');
+    for (const header of ['Content-Length', 'Content-Range', 'Accept-Ranges']) {
+      const value = upstream.headers.get(header);
+      if (value) res.set(header, value);
+    }
+    Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream).pipe(res);
+  } catch (err) {
+    console.error('Recording fetch failed:', err);
+    if (!res.headersSent) res.status(502).json({ error: 'Could not load the recording from Twilio' });
+  }
 });
 
 // Each suggestion is a paid API call, so keep a lid on how fast one person can request them.

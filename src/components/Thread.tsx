@@ -19,6 +19,8 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
   const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState('');
+  const [calling, setCalling] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
 
@@ -45,7 +47,9 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
 
   useEffect(() => {
     if (!lastEvent || lastEvent.conversationId !== conversationId) return;
-    if (lastEvent.type === 'message') {
+    if (lastEvent.type === 'message-updated') {
+      setMessages((list) => list.map((m) => (m.id === lastEvent.message.id ? { ...m, ...lastEvent.message, author_name: m.author_name } : m)));
+    } else if (lastEvent.type === 'message') {
       setMessages((list) => (list.some((m) => m.id === lastEvent.message.id) ? list : [...list, lastEvent.message]));
       // Opening the conversation again marks the new message as read.
       if (lastEvent.message.direction === 'in') load().then(onChanged).catch(console.error);
@@ -122,6 +126,34 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
     `${r.title} ${r.body}`.toLowerCase().includes(pickerQuery.trim().toLowerCase()),
   );
 
+  const saveName = async () => {
+    if (!conversation || renaming === null) return;
+    const name = renaming.trim();
+    setRenaming(null);
+    if (!name || name === conversation.contact.name) return;
+    try {
+      const { contact } = await api<{ contact: ConversationDetail['contact'] }>(`/contacts/${conversation.contact.id}`, { method: 'PATCH', body: { name } });
+      setConversation({ ...conversation, contact });
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const callBack = async () => {
+    setError('');
+    setCalling('Starting call…');
+    try {
+      const { message, ringing } = await api<{ message: Message; ringing: string }>(`/conversations/${conversationId}/call`, { method: 'POST' });
+      setMessages((list) => (list.some((m) => m.id === message.id) ? list : [...list, message]));
+      setCalling(`Ringing your phone (${ringing}). Answer it to be connected.`);
+      setTimeout(() => setCalling(null), 15000);
+    } catch (err) {
+      setError((err as Error).message);
+      setCalling(null);
+    }
+  };
+
   const setStatus = async (status: 'open' | 'closed') => {
     await api(`/conversations/${conversationId}`, { method: 'PATCH', body: { status } });
     setConversation((c) => (c ? { ...c, status } : c));
@@ -141,7 +173,25 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
       <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h2 className="truncate font-semibold">{contact.name}</h2>
+            {renaming !== null ? (
+              <input
+                autoFocus
+                value={renaming}
+                maxLength={100}
+                onChange={(e) => setRenaming(e.target.value)}
+                onBlur={saveName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveName();
+                  if (e.key === 'Escape') setRenaming(null);
+                }}
+                className="rounded border border-blue-400 px-2 py-0.5 font-semibold focus:outline-none"
+              />
+            ) : (
+              <button onClick={() => setRenaming(contact.name)} className="group flex min-w-0 items-center gap-1" title="Rename contact">
+                <h2 className="truncate font-semibold">{contact.name}</h2>
+                <span className="text-xs text-slate-400 opacity-0 group-hover:opacity-100">✎</span>
+              </button>
+            )}
             {conversation.online ? (
               <span className="rounded-full bg-green-100 px-2 text-xs text-green-700">On your website</span>
             ) : (
@@ -160,16 +210,43 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
             )}
           </div>
         </div>
+        {contact.phone && business.smsAvailable && business.smsNumber && (
+          <button
+            onClick={callBack}
+            disabled={calling !== null}
+            className="ml-auto shrink-0 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
+            title="Rings your phone, then connects you to the customer. They see your business number."
+          >
+            📞 Call back
+          </button>
+        )}
         <button
           onClick={() => setStatus(conversation.status === 'open' ? 'closed' : 'open')}
-          className="ml-auto shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+          className={`${contact.phone && business.smsAvailable && business.smsNumber ? '' : 'ml-auto '}shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50`}
         >
           {conversation.status === 'open' ? 'Close' : 'Reopen'}
         </button>
       </header>
+      {calling && <div className="border-b border-green-200 bg-green-50 px-6 py-2 text-sm text-green-800">{calling}</div>}
 
       <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-6 py-4">
-        {messages.map((m) => (
+        {messages.map((m) =>
+          m.kind === 'call' ? (
+            <div key={m.id} className="flex justify-center">
+              <div className={`rounded-full px-3 py-1 text-xs ${m.body.startsWith('Missed') ? 'bg-red-50 text-red-700' : 'bg-slate-200 text-slate-600'}`}>
+                📞 {m.body} · {new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+              </div>
+            </div>
+          ) : m.kind === 'voicemail' ? (
+            <div key={m.id} className="flex justify-start">
+              <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3">
+                <div className="mb-2 text-xs font-semibold text-amber-800">🎙️ Voicemail{m.duration ? ` · ${Math.floor(m.duration / 60)}:${String(m.duration % 60).padStart(2, '0')}` : ''}</div>
+                <audio controls preload="none" src={`/api/recordings/${m.id}`} className="h-9 w-72 max-w-full" />
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700">{m.body}</p>
+                <div className="mt-1 text-[11px] text-slate-400">{new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</div>
+              </div>
+            </div>
+          ) : (
           <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
             <div className="max-w-[70%]">
               <div
@@ -184,12 +261,13 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
                 {m.body}
               </div>
               <div className={`mt-1 text-[11px] text-slate-400 ${m.direction === 'out' ? 'text-right' : ''}`}>
-                {m.automated ? 'Away message (automatic) · ' : m.direction === 'out' && m.author_name ? `${m.author_name} · ` : ''}
+                {m.automated ? 'Sent automatically · ' : m.direction === 'out' && m.author_name ? `${m.author_name} · ` : ''}
                 {m.channel === 'sms' ? 'Text' : 'Chat'} · {new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
               </div>
             </div>
           </div>
-        ))}
+          ),
+        )}
         <div ref={bottom} />
       </div>
 

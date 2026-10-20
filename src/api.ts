@@ -14,6 +14,11 @@ export interface Business {
   aiNotes: string;
   aiAvailable: boolean;
   emailAvailable: boolean;
+  forwardNumber: string | null;
+  ringSeconds: number;
+  voicemailGreeting: string;
+  missedCallTextEnabled: boolean;
+  missedCallText: string;
 }
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -21,7 +26,7 @@ export type Day = (typeof DAYS)[number];
 export type WeeklyHours = Record<Day, { open: string; close: string } | null>;
 
 export interface Me {
-  user: { id: string; name: string; email: string; notifyEmail: boolean };
+  user: { id: string; name: string; email: string; notifyEmail: boolean; phone: string | null };
   business: Business;
 }
 
@@ -59,6 +64,8 @@ export interface Message {
   body: string;
   author_name: string | null;
   automated: number;
+  kind: 'text' | 'call' | 'voicemail';
+  duration: number | null;
   created_at: string;
 }
 
@@ -75,7 +82,9 @@ export interface ConversationDetail {
 /** Events pushed over /api/stream. */
 export type InboxEvent =
   | { type: 'message'; conversationId: string; message: Message }
+  | { type: 'message-updated'; conversationId: string; message: Message }
   | { type: 'read'; conversationId: string }
+  | { type: 'contact'; contactId: string; conversationId?: undefined }
   | { type: 'status'; conversationId: string; status: 'open' | 'closed' }
   | { type: 'presence'; conversationId: string; online: boolean };
 

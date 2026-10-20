@@ -4,8 +4,10 @@ import { api, DAYS, type Business, type Day, type SavedReply, type WeeklyHours }
 interface Props {
   business: Business;
   notifyEmail: boolean;
+  userPhone: string | null;
   onSaved: (business: Business) => void;
   onNotifyEmailChange: (value: boolean) => void;
+  onUserPhoneChange: (value: string | null) => void;
 }
 
 const DAY_NAMES: Record<Day, string> = { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' };
@@ -59,6 +61,7 @@ export default function Settings(props: Props) {
         <InstallSection business={props.business} />
         <WidgetSection {...props} />
         <HoursSection {...props} />
+        <PhoneSection {...props} />
         <SavedRepliesSection />
         <AiSection {...props} />
         <NotificationsSection {...props} />
@@ -204,6 +207,84 @@ function HoursSection({ business, onSaved }: Props) {
             <textarea id="away" rows={3} maxLength={500} className={input} value={awayMessage} onChange={(e) => setAwayMessage(e.target.value)} required />
           </div>
         </fieldset>
+        <div className="flex items-center gap-3">
+          <button disabled={busy} className={primary}>Save</button>
+          <StatusText status={status} />
+        </div>
+      </Card>
+    </form>
+  );
+}
+
+function PhoneSection({ business, userPhone, onSaved, onUserPhoneChange }: Props) {
+  const [form, setForm] = useState({
+    forwardNumber: business.forwardNumber ?? '',
+    ringSeconds: business.ringSeconds,
+    voicemailGreeting: business.voicemailGreeting,
+    missedCallTextEnabled: business.missedCallTextEnabled,
+    missedCallText: business.missedCallText,
+  });
+  const [myPhone, setMyPhone] = useState(userPhone ?? '');
+  const [status, setStatus] = useState<Status>(null);
+  const [busy, setBusy] = useState(false);
+  const ready = business.smsAvailable && business.smsNumber;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setStatus(null);
+    try {
+      const { business: updated } = await api<{ business: Business }>('/business', { method: 'PATCH', body: form });
+      await api('/me', { method: 'PATCH', body: { phone: myPhone } });
+      onSaved(updated);
+      onUserPhoneChange(myPhone || null);
+      setStatus({ ok: true, text: 'Saved' });
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit}>
+      <Card
+        title="Phone calls & voicemail"
+        description={
+          ready
+            ? <>Calls to {business.smsNumber} ring your shop first (during office hours), then go to voicemail. Voicemails appear in the inbox with a transcript. In Twilio, set the number’s <b>A call comes in</b> webhook to <code>{location.origin}/api/voice/incoming</code> and <b>Call status changes</b> to <code>{location.origin}/api/voice/status</code>.</>
+            : 'Needs Twilio: set up texting first (see docs/TWILIO_SETUP.md). The same number handles calls.'
+        }
+      >
+        <div>
+          <label className={label} htmlFor="fwd">Ring this phone first (optional)</label>
+          <input id="fwd" className={input} placeholder="Your shop or mobile number" value={form.forwardNumber} onChange={(e) => setForm({ ...form, forwardNumber: e.target.value })} />
+          <p className="mt-1 text-xs text-slate-500">
+            Leave empty to send every call straight to voicemail. Don’t enter a number that already forwards its missed calls to your Twilio number, or calls will loop.
+          </p>
+        </div>
+        <div>
+          <label className={label} htmlFor="ring">Ring for (seconds) before voicemail</label>
+          <input id="ring" type="number" min={5} max={60} className={`${input} w-28`} value={form.ringSeconds} onChange={(e) => setForm({ ...form, ringSeconds: Number(e.target.value) })} />
+        </div>
+        <div>
+          <label className={label} htmlFor="vm">Voicemail greeting (read out to callers)</label>
+          <textarea id="vm" rows={3} maxLength={500} className={input} value={form.voicemailGreeting} onChange={(e) => setForm({ ...form, voicemailGreeting: e.target.value })} required />
+        </div>
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.missedCallTextEnabled} onChange={(e) => setForm({ ...form, missedCallTextEnabled: e.target.checked })} className="h-4 w-4" />
+            Text callers automatically when you miss their call
+          </label>
+          <textarea rows={2} maxLength={320} disabled={!form.missedCallTextEnabled} className={`${input} disabled:opacity-50`} value={form.missedCallText} onChange={(e) => setForm({ ...form, missedCallText: e.target.value })} required />
+        </div>
+        <div>
+          <label className={label} htmlFor="myphone">Your mobile, for “Call back”</label>
+          <input id="myphone" className={input} placeholder="+61400123456" value={myPhone} onChange={(e) => setMyPhone(e.target.value)} />
+          <p className="mt-1 text-xs text-slate-500">
+            When you click 📞 Call back, we ring this phone and connect you to the customer, who sees your business number. Only you see this setting.
+          </p>
+        </div>
         <div className="flex items-center gap-3">
           <button disabled={busy} className={primary}>Save</button>
           <StatusText status={status} />

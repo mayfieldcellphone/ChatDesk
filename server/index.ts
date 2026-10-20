@@ -4,14 +4,16 @@ import path from 'node:path';
 import { authRouter } from './auth';
 import { inboxRouter } from './inbox';
 import { smsRouter } from './sms';
+import { voiceRouter } from './voice';
 import { widgetRouter } from './widget';
 
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-// Twilio posts form-encoded bodies; the SMS router parses its own.
+// Twilio posts form-encoded bodies; these routers parse their own.
 app.use('/api/sms', smsRouter);
+app.use('/api/voice', voiceRouter);
 app.use(express.json({ limit: '50kb' }));
 app.use('/api/auth', authRouter);
 app.use('/api/widget', widgetRouter);

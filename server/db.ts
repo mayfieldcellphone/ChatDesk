@@ -93,6 +93,42 @@ addColumn('users', 'notify_email', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('conversations', 'last_auto_reply_at', 'TEXT');
 addColumn('conversations', 'last_email_alert_at', 'TEXT');
 addColumn('messages', 'automated', 'INTEGER NOT NULL DEFAULT 0');
+// Phone calls. Calls and voicemails live in the conversation timeline as messages on the 'sms'
+// (phone number) channel, distinguished by kind.
+addColumn('messages', 'kind', "TEXT NOT NULL DEFAULT 'text'");
+addColumn('messages', 'recording_sid', 'TEXT');
+addColumn('messages', 'duration', 'INTEGER');
+addColumn('businesses', 'forward_number', 'TEXT');
+addColumn('businesses', 'ring_seconds', 'INTEGER NOT NULL DEFAULT 20');
+addColumn(
+  'businesses',
+  'voicemail_greeting',
+  "TEXT NOT NULL DEFAULT 'Thanks for calling. Sorry we can''t take your call right now. Please leave your name, number and a short message after the beep, and we''ll get back to you soon.'",
+);
+addColumn('businesses', 'missed_call_text_enabled', 'INTEGER NOT NULL DEFAULT 1');
+addColumn(
+  'businesses',
+  'missed_call_text',
+  "TEXT NOT NULL DEFAULT 'Sorry we missed your call! How can we help? Reply to this text and we''ll get back to you.'",
+);
+addColumn('users', 'phone', 'TEXT');
+addColumn('conversations', 'last_missed_text_at', 'TEXT');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS calls (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    call_sid TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL CHECK (status IN ('ringing', 'answered', 'missed')),
+    has_voicemail INTEGER NOT NULL DEFAULT 0,
+    -- Set once the call-ended webhook has been handled; Twilio may send it before or after the voicemail.
+    ended INTEGER NOT NULL DEFAULT 0,
+    duration INTEGER,
+    message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+`);
 
 export type Channel = 'webchat' | 'sms';
 
@@ -109,6 +145,11 @@ export interface Business {
   hours: string | null;
   away_message: string;
   ai_notes: string;
+  forward_number: string | null;
+  ring_seconds: number;
+  voicemail_greeting: string;
+  missed_call_text_enabled: number;
+  missed_call_text: string;
   created_at: string;
 }
 
@@ -141,6 +182,24 @@ export interface Message {
   body: string;
   author_id: string | null;
   automated: number;
+  kind: MessageKind;
+  recording_sid: string | null;
+  duration: number | null;
+  created_at: string;
+}
+
+export type MessageKind = 'text' | 'call' | 'voicemail';
+
+export interface Call {
+  id: string;
+  business_id: string;
+  conversation_id: string;
+  call_sid: string;
+  status: 'ringing' | 'answered' | 'missed';
+  has_voicemail: number;
+  ended: number;
+  duration: number | null;
+  message_id: string | null;
   created_at: string;
 }
 
@@ -167,13 +226,20 @@ export function run(sql: string, ...params: (string | number | null)[]) {
   return db.prepare(sql).run(...params);
 }
 
+export interface MessageOptions {
+  authorId?: string | null;
+  automated?: boolean;
+  kind?: MessageKind;
+  recordingSid?: string | null;
+  duration?: number | null;
+}
+
 export function insertMessage(
   conversation: Conversation,
   direction: 'in' | 'out',
   channel: Channel,
   body: string,
-  authorId: string | null = null,
-  automated = false,
+  { authorId = null, automated = false, kind = 'text', recordingSid = null, duration = null }: MessageOptions = {},
 ): Message {
   const message: Message = {
     id: newId(),
@@ -183,11 +249,15 @@ export function insertMessage(
     body,
     author_id: authorId,
     automated: automated ? 1 : 0,
+    kind,
+    recording_sid: recordingSid,
+    duration,
     created_at: now(),
   };
   run(
-    'INSERT INTO messages (id, conversation_id, direction, channel, body, author_id, automated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    message.id, message.conversation_id, direction, channel, body, authorId, message.automated, message.created_at,
+    `INSERT INTO messages (id, conversation_id, direction, channel, body, author_id, automated, kind, recording_sid, duration, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    message.id, message.conversation_id, direction, channel, body, authorId, message.automated, kind, recordingSid, duration, message.created_at,
   );
   // A customer message reopens the conversation and counts as unread; a staff reply clears unread.
   // Automated replies (away messages) leave unread alone so the team still sees the chat needs an answer.

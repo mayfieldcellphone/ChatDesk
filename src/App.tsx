@@ -65,8 +65,10 @@ export default function App() {
           <Settings
             business={me.business}
             notifyEmail={me.user.notifyEmail}
+            userPhone={me.user.phone}
             onSaved={(business) => setMe({ ...me, business })}
             onNotifyEmailChange={(notifyEmail) => setMe({ ...me, user: { ...me.user, notifyEmail } })}
+            onUserPhoneChange={(phone) => setMe({ ...me, user: { ...me.user, phone } })}
           />
         )}
       </main>

@@ -39,13 +39,20 @@ export async function emailTeam(business: Business, conversation: Conversation, 
 
   const contact = get<{ name: string; phone: string | null }>('SELECT name, phone FROM contacts WHERE id = ?', conversation.contact_id);
   const name = (contact?.name ?? 'A customer').replace(/[\r\n]+/g, ' ');
-  const via = message.channel === 'sms' ? 'text' : 'web chat';
-  const link = process.env.PUBLIC_URL ? `\n\nReply in ChatDesk: ${process.env.PUBLIC_URL.replace(/\/$/, '')}` : '';
+  const who = `${name}${contact?.phone ? ` (${contact.phone})` : ''}`;
+  const link = process.env.PUBLIC_URL ? `\n\nOpen ChatDesk: ${process.env.PUBLIC_URL.replace(/\/$/, '')}` : '';
+  const { subject, intro } =
+    message.kind === 'voicemail'
+      ? { subject: `New voicemail from ${name}`, intro: `${who} left a voicemail for ${business.name}. Transcript:` }
+      : message.kind === 'call'
+        ? { subject: `Missed call from ${name}`, intro: `${who} called ${business.name} and hung up without leaving a voicemail.` }
+        : { subject: `New ${message.channel === 'sms' ? 'text' : 'web chat'} message from ${name}`, intro: `${who} wrote to ${business.name}:` };
+  const body = message.kind === 'call' ? '' : `\n\n${message.body}`;
 
   await mailer.sendMail({
     from: process.env.SMTP_FROM,
     to: recipients.map((r) => r.email),
-    subject: `New ${via} message from ${name}`,
-    text: `${name}${contact?.phone ? ` (${contact.phone})` : ''} wrote to ${business.name}:\n\n${message.body}${link}\n\nYou're getting this because nobody had the inbox open. Turn these emails off in Settings.`,
+    subject,
+    text: `${intro}${body}${link}\n\nYou're getting this because nobody had the inbox open. Turn these emails off in Settings.`,
   });
 }
