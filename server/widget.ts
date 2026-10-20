@@ -5,6 +5,8 @@ import {
   type Business, type Conversation, type Message,
 } from './db';
 import { isVisitorOnline, publish, subscribe } from './events';
+import { isOpen } from './hours';
+import { onInboundMessage } from './inbound';
 import { rateLimit } from './rateLimit';
 
 // Public API used by the embeddable widget (public/widget.js) on customers' websites.
@@ -56,7 +58,13 @@ const tooLong = (s: string) => s.length > MAX_MESSAGE;
 widgetRouter.get('/:key/config', (req, res) => {
   const business = loadBusiness(req, res);
   if (!business) return;
-  res.json({ name: business.name, color: business.color, greeting: business.greeting });
+  // `open` is null when the business hasn't turned on office hours.
+  res.json({
+    name: business.name,
+    color: business.color,
+    greeting: business.greeting,
+    open: business.hours_enabled ? isOpen(business) : null,
+  });
 });
 
 widgetRouter.post('/:key/conversations', startLimit, (req, res) => {
@@ -86,7 +94,7 @@ widgetRouter.post('/:key/conversations', startLimit, (req, res) => {
     conversation.id, business.id, contact.id, conversation.visitor_token, pageUrl, t, t,
   );
   const message = insertMessage(conversation, 'in', 'webchat', body);
-  publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message });
+  onInboundMessage(business, conversation, message);
 
   res.status(201).json({
     conversationId: conversation.id,
@@ -115,9 +123,10 @@ widgetRouter.post('/:key/conversations/:id/messages', messageLimit, (req, res) =
   // A visitor typing in the widget brings an SMS thread back to web chat.
   if (found.conversation.channel !== 'webchat') {
     run("UPDATE conversations SET channel = 'webchat' WHERE id = ?", found.conversation.id);
+    found.conversation.channel = 'webchat';
   }
   const message = insertMessage(found.conversation, 'in', 'webchat', body);
-  publish(`biz:${found.business.id}`, { type: 'message', conversationId: found.conversation.id, message });
+  onInboundMessage(found.business, found.conversation, message);
   res.status(201).json({ message: publicMessage(message) });
 });
 

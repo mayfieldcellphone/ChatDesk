@@ -5,6 +5,10 @@ Website chat widget + team inbox for local businesses, in the style of Birdeye W
 - **Chat widget**: one `<script>` tag adds a chat bubble to any website. Visitors leave their name, mobile and message; the conversation stays on their device across page loads.
 - **Inbox**: every conversation in one place, updating live. Shows when the customer is on your website right now, unread counts, open/closed, search.
 - **Reply by chat or text**: while the customer is on your site, reply in the widget. Once they've left, reply by SMS (via Twilio), and texts they send back land in the same thread.
+- **Office hours & away message**: outside your hours, customers get an automatic reply and the widget shows you're away.
+- **Saved replies**: one-click answers to common questions, with `{name}` and `{business}` filled in. Type `/` in the reply box.
+- **AI-suggested replies**: Claude drafts a reply from the conversation, your business info and saved replies, for you to check before sending.
+- **Alerts**: a sound and desktop notification while the inbox is open, and an email when nobody has it open.
 - **Multi-business**: each sign-up gets its own business, widget key, colour, greeting and SMS number.
 
 ## Run locally
@@ -21,14 +25,17 @@ npm run dev              # http://localhost:3000
 2. Go to **Settings** and click **Preview on a test page** to try the widget as a customer.
 3. To add it to your real website, paste the snippet from Settings before `</body>`.
 
-## Texting (optional)
+## Optional features
 
-1. Buy an SMS-capable number in Twilio.
-2. Set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` and `PUBLIC_URL` (your server's public https address) in `.env`.
-3. In Twilio, set the number's **A message comes in** webhook to `PUBLIC_URL/api/sms/inbound` (HTTP POST).
-4. In ChatDesk **Settings**, enter the number.
+| Feature | What to set |
+| --- | --- |
+| Texting | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `PUBLIC_URL`. Step-by-step guide: [docs/TWILIO_SETUP.md](docs/TWILIO_SETUP.md) |
+| AI-suggested replies | `ANTHROPIC_API_KEY` (uses Claude Opus 5.5 by default; override with `ANTHROPIC_MODEL`). Each suggestion is one paid API call. Add your prices and policies under Settings so drafts are accurate. |
+| Email alerts | `SMTP_HOST`, `SMTP_FROM`, and usually `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` from any email provider |
 
-Incoming webhooks are verified with Twilio's signature, so nobody else can post fake texts into your inbox.
+Office hours, away messages, saved replies and desktop alerts need no setup: turn them on in Settings.
+
+Incoming Twilio webhooks are verified with Twilio's signature, so nobody else can post fake texts into your inbox.
 
 ## Production
 
@@ -51,7 +58,11 @@ a shared pub/sub (e.g. Redis) in `server/events.ts`.
 | `public/demo.html` | Test page that loads the widget |
 | `server/widget.ts` | Public API the widget talks to (CORS-enabled, rate-limited, visitor token per chat) |
 | `server/inbox.ts` | Signed-in inbox API, scoped to the user's business |
-| `server/sms.ts` | Twilio send + verified inbound webhook |
+| `server/sms.ts`, `server/twilio.ts` | Twilio inbound webhook (signature-verified) and sending |
+| `server/inbound.ts` | What happens when a customer message arrives: live update, away message, email alert |
+| `server/hours.ts` | Office hours and the open/closed check |
+| `server/ai.ts` | AI-suggested replies (Claude) |
+| `server/notify.ts` | Email alerts |
 | `server/events.ts` | Live updates (SSE) and "on your website" presence |
 | `server/auth.ts` | Sign-up / login with an httpOnly session cookie |
 | `server/db.ts` | SQLite schema and helpers |
@@ -59,5 +70,5 @@ a shared pub/sub (e.g. Redis) in `server/events.ts`.
 
 ## Ideas for next
 
-Canned replies, assigning conversations to teammates, email/push notifications for new chats,
-office hours and an away message, AI-suggested replies, and Google review requests after a job.
+Assigning conversations to teammates, inviting team members, mobile push notifications, and Google
+review requests after a job.

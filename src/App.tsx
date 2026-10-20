@@ -62,7 +62,12 @@ export default function App() {
         {view === 'inbox' ? (
           <Inbox business={me.business} onOpenSettings={() => setView('settings')} />
         ) : (
-          <Settings business={me.business} onSaved={(business) => setMe({ ...me, business })} />
+          <Settings
+            business={me.business}
+            notifyEmail={me.user.notifyEmail}
+            onSaved={(business) => setMe({ ...me, business })}
+            onNotifyEmailChange={(notifyEmail) => setMe({ ...me, user: { ...me.user, notifyEmail } })}
+          />
         )}
       </main>
     </div>

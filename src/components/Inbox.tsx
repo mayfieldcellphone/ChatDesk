@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, timeAgo, type Business, type ConversationSummary, type InboxEvent } from '../api';
+import { desktopAlertsSupported, playChime, showDesktopAlert } from '../alerts';
 import Thread from './Thread';
 
 interface Props {
@@ -14,6 +15,7 @@ export default function Inbox({ business, onOpenSettings }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<InboxEvent | null>(null);
   const [connected, setConnected] = useState(true);
+  const [alertPermission, setAlertPermission] = useState(desktopAlertsSupported() ? Notification.permission : 'denied');
 
   const loadList = useCallback(() => {
     const params = new URLSearchParams({ status, q: query });
@@ -27,9 +29,24 @@ export default function Inbox({ business, onOpenSettings }: Props) {
     return () => clearTimeout(t);
   }, [loadList, query]);
 
-  // Keep the latest loader in a ref so the long-lived EventSource always refreshes with current filters.
+  // The long-lived EventSource reads these through refs so it always sees current state.
   const loadListRef = useRef(loadList);
   loadListRef.current = loadList;
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+
+  const alertNewMessage = (event: Extract<InboxEvent, { type: 'message' }>) => {
+    if (event.message.direction !== 'in') return;
+    const watching = !document.hidden && selectedRef.current === event.conversationId;
+    if (watching) return;
+    playChime();
+    if (document.hidden) {
+      const name = conversationsRef.current.find((c) => c.id === event.conversationId)?.contactName ?? 'a customer';
+      showDesktopAlert(`New message from ${name}`, event.message.body, () => setSelectedId(event.conversationId));
+    }
+  };
 
   useEffect(() => {
     const source = new EventSource('/api/stream');
@@ -38,6 +55,7 @@ export default function Inbox({ business, onOpenSettings }: Props) {
     source.onmessage = (e) => {
       const event = JSON.parse(e.data) as InboxEvent;
       setLastEvent(event);
+      if (event.type === 'message') alertNewMessage(event);
       if (event.type === 'presence') {
         setConversations((list) => list.map((c) => (c.id === event.conversationId ? { ...c, online: event.online } : c)));
       } else {
@@ -60,6 +78,14 @@ export default function Inbox({ business, onOpenSettings }: Props) {
             <h1 className="text-lg font-semibold">Inbox</h1>
             {!connected && <span className="text-xs text-amber-600">Reconnecting…</span>}
           </div>
+          {alertPermission === 'default' && (
+            <button
+              onClick={() => Notification.requestPermission().then(setAlertPermission)}
+              className="w-full rounded-md bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 hover:bg-amber-100"
+            >
+              🔔 Turn on desktop alerts so you don't miss new messages
+            </button>
+          )}
           <div className="flex rounded-md bg-slate-100 p-1 text-sm">
             {(['open', 'closed'] as const).map((s) => (
               <button

@@ -6,11 +6,35 @@ export interface Business {
   greeting: string;
   smsNumber: string | null;
   smsAvailable: boolean;
+  hoursEnabled: boolean;
+  timezone: string;
+  hours: WeeklyHours;
+  awayMessage: string;
+  openNow: boolean;
+  aiNotes: string;
+  aiAvailable: boolean;
+  emailAvailable: boolean;
 }
 
+export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+export type Day = (typeof DAYS)[number];
+export type WeeklyHours = Record<Day, { open: string; close: string } | null>;
+
 export interface Me {
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; notifyEmail: boolean };
   business: Business;
+}
+
+export interface SavedReply {
+  id: string;
+  title: string;
+  body: string;
+}
+
+/** Fills {name} (customer's first name) and {business} placeholders in a saved reply. */
+export function fillReply(body: string, contactName: string, businessName: string) {
+  const first = contactName.trim().split(/\s+/)[0] || 'there';
+  return body.replace(/\{name\}/gi, first).replace(/\{business\}/gi, businessName);
 }
 
 export type Channel = 'webchat' | 'sms';
@@ -34,6 +58,7 @@ export interface Message {
   channel: Channel;
   body: string;
   author_name: string | null;
+  automated: number;
   created_at: string;
 }
 

@@ -62,6 +62,7 @@
     '.head{background:var(--c);color:#fff;padding:18px 20px}' +
     '.head h2{margin:0;font-size:17px;font-weight:700}' +
     '.head p{margin:6px 0 0;font-size:13px;line-height:1.4;opacity:.92}' +
+    '.head .away{display:none;margin-top:10px;font-size:12px;background:rgba(0,0,0,.18);border-radius:6px;padding:6px 8px;opacity:1}' +
     '.body{flex:1;overflow-y:auto;padding:16px;background:#f8fafc}' +
     'form.start label{display:block;font-size:12px;font-weight:600;color:#475569;margin:0 0 4px}' +
     'form.start input,form.start textarea{width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:10px;font-size:14px;margin:0 0 12px;background:#fff;color:#0f172a}' +
@@ -82,7 +83,7 @@
     '.composer.hidden{display:none}' +
     '</style>' +
     '<div class="panel" role="dialog" aria-label="Chat with us">' +
-    '  <div class="head"><h2></h2><p></p></div>' +
+    '  <div class="head"><h2></h2><p class="greeting"></p><p class="away">We’re away right now. Leave a message and we’ll get back to you when we open.</p></div>' +
     '  <div class="body"></div>' +
     '  <form class="composer hidden"><textarea placeholder="Type a message…" aria-label="Message" maxlength="2000"></textarea><button type="submit">Send</button></form>' +
     '</div>' +
@@ -262,7 +263,8 @@
     state.config = config;
     host.style.setProperty('--c', /^#[0-9a-f]{6}$/i.test(config.color) ? config.color : '#2563eb');
     root.querySelector('.head h2').textContent = config.name;
-    root.querySelector('.head p').textContent = config.greeting;
+    root.querySelector('.head .greeting').textContent = config.greeting;
+    if (config.open === false) root.querySelector('.head .away').style.display = 'block';
     document.body.appendChild(host);
 
     state.session = loadSession();

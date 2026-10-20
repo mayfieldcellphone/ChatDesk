@@ -64,7 +64,35 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS messages_conversation ON messages(conversation_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS saved_replies (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS saved_replies_business ON saved_replies(business_id, title);
 `);
+
+// Columns added after the first release. SQLite has no ADD COLUMN IF NOT EXISTS, so check first.
+function addColumn(table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!columns.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+addColumn('businesses', 'hours_enabled', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('businesses', 'timezone', "TEXT NOT NULL DEFAULT 'Australia/Sydney'");
+addColumn('businesses', 'hours', 'TEXT');
+addColumn(
+  'businesses',
+  'away_message',
+  "TEXT NOT NULL DEFAULT 'Thanks for your message! We''re closed right now, but we''ll reply as soon as we open.'",
+);
+addColumn('businesses', 'ai_notes', "TEXT NOT NULL DEFAULT ''");
+addColumn('users', 'notify_email', 'INTEGER NOT NULL DEFAULT 1');
+addColumn('conversations', 'last_auto_reply_at', 'TEXT');
+addColumn('conversations', 'last_email_alert_at', 'TEXT');
+addColumn('messages', 'automated', 'INTEGER NOT NULL DEFAULT 0');
 
 export type Channel = 'webchat' | 'sms';
 
@@ -75,6 +103,12 @@ export interface Business {
   color: string;
   greeting: string;
   sms_number: string | null;
+  hours_enabled: number;
+  timezone: string;
+  /** JSON-encoded WeeklyHours (see hours.ts); null means the default hours. */
+  hours: string | null;
+  away_message: string;
+  ai_notes: string;
   created_at: string;
 }
 
@@ -106,6 +140,15 @@ export interface Message {
   channel: Channel;
   body: string;
   author_id: string | null;
+  automated: number;
+  created_at: string;
+}
+
+export interface SavedReply {
+  id: string;
+  business_id: string;
+  title: string;
+  body: string;
   created_at: string;
 }
 
@@ -130,6 +173,7 @@ export function insertMessage(
   channel: Channel,
   body: string,
   authorId: string | null = null,
+  automated = false,
 ): Message {
   const message: Message = {
     id: newId(),
@@ -138,18 +182,22 @@ export function insertMessage(
     channel,
     body,
     author_id: authorId,
+    automated: automated ? 1 : 0,
     created_at: now(),
   };
   run(
-    'INSERT INTO messages (id, conversation_id, direction, channel, body, author_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    message.id, message.conversation_id, direction, channel, body, authorId, message.created_at,
+    'INSERT INTO messages (id, conversation_id, direction, channel, body, author_id, automated, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    message.id, message.conversation_id, direction, channel, body, authorId, message.automated, message.created_at,
   );
-  // A customer message reopens the conversation and counts as unread; a reply clears unread.
+  // A customer message reopens the conversation and counts as unread; a staff reply clears unread.
+  // Automated replies (away messages) leave unread alone so the team still sees the chat needs an answer.
   if (direction === 'in') {
     run(
       "UPDATE conversations SET last_message_at = ?, status = 'open', unread_count = unread_count + 1 WHERE id = ?",
       message.created_at, conversation.id,
     );
+  } else if (automated) {
+    run('UPDATE conversations SET last_message_at = ? WHERE id = ?', message.created_at, conversation.id);
   } else {
     run('UPDATE conversations SET last_message_at = ?, unread_count = 0 WHERE id = ?', message.created_at, conversation.id);
   }
