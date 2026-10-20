@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChatDesk widget demo</title>
+    <style>
+      body { margin: 0; font-family: system-ui, sans-serif; background: #f1f5f9; color: #0f172a; }
+      main { max-width: 640px; margin: 80px auto; padding: 0 16px; }
+      code { background: #e2e8f0; padding: 2px 6px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Your website</h1>
+      <p>This page shows the ChatDesk widget the way your customers will see it. Click the chat bubble in the bottom-right corner.</p>
+      <p id="missing" hidden>Add <code>?key=YOUR_WIDGET_KEY</code> to this page's address. You'll find the key under Settings in the inbox.</p>
+    </main>
+    <script>
+      var key = new URLSearchParams(location.search).get('key');
+      if (!key) {
+        document.getElementById('missing').hidden = false;
+      } else {
+        var s = document.createElement('script');
+        s.src = '/widget.js';
+        s.setAttribute('data-key', key);
+        document.body.appendChild(s);
+      }
+    </script>
+  </body>
+</html>
