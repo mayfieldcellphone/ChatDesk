@@ -11,6 +11,8 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
 // Twilio posts form-encoded bodies; these routers parse their own.
 app.use('/api/sms', smsRouter);
 app.use('/api/voice', voiceRouter);
