@@ -149,6 +149,8 @@ addColumn('conversations', 'connection_id', 'TEXT');
 addColumn('contacts', 'instagram_id', 'TEXT');
 addColumn('messages', 'external_id', 'TEXT');
 addColumn('businesses', 'review_link', 'TEXT');
+addColumn('businesses', 'website_url', 'TEXT');
+addColumn('businesses', 'website_imported_at', 'TEXT');
 addColumn(
   'businesses',
   'review_request_text',
@@ -236,6 +238,8 @@ export interface Business {
   missed_call_text: string;
   review_link: string | null;
   review_request_text: string;
+  website_url: string | null;
+  website_imported_at: string | null;
   created_at: string;
 }
 

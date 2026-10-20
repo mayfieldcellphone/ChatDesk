@@ -103,7 +103,12 @@ authRouter.post('/signup', async (req, res) => {
   };
   const userId = newId();
   const hash = await bcrypt.hash(password, 12);
-  run('INSERT INTO businesses (id, name, widget_key, created_at) VALUES (?, ?, ?, ?)', business.id, business.name, business.widget_key, now());
+  // Optional: the inbox offers to fill in settings from this website straight after sign-up.
+  const website = str(req.body.website).slice(0, 500) || null;
+  run(
+    'INSERT INTO businesses (id, name, widget_key, website_url, created_at) VALUES (?, ?, ?, ?, ?)',
+    business.id, business.name, business.widget_key, website, now(),
+  );
   run(
     'INSERT INTO users (id, business_id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     userId, business.id, name, email, hash, now(),

@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 
-export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
+export default function Login({ onSignedIn }: { onSignedIn: (isNewAccount: boolean) => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const [form, setForm] = useState({ businessName: '', name: '', email: '', password: '' });
+  const [form, setForm] = useState({ businessName: '', website: '', name: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -15,7 +15,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
     setError('');
     try {
       await api(`/auth/${mode}`, { method: 'POST', body: form });
-      onSignedIn();
+      onSignedIn(mode === 'signup');
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -37,6 +37,7 @@ export default function Login({ onSignedIn }: { onSignedIn: () => void }) {
         {mode === 'signup' && (
           <>
             <input className={input} placeholder="Business name" value={form.businessName} onChange={set('businessName')} required />
+            <input className={input} placeholder="Website (optional), e.g. yourshop.com.au" value={form.website} onChange={set('website')} autoComplete="url" />
             <input className={input} placeholder="Your name" value={form.name} onChange={set('name')} autoComplete="name" required />
           </>
         )}

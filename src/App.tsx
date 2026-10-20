@@ -24,6 +24,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>(route.view);
+  const [autoImport, setAutoImport] = useState(false);
 
   const loadMe = () =>
     api<Me>('/me')
@@ -39,7 +40,19 @@ export default function App() {
   }, []);
 
   if (loading) return <div className="flex h-full items-center justify-center text-slate-500">Loading…</div>;
-  if (!me) return <Login onSignedIn={loadMe} />;
+  if (!me)
+    return (
+      <Login
+        onSignedIn={(isNewAccount) => {
+          // New accounts land on Settings, which reads their website straight away if they gave one.
+          if (isNewAccount) {
+            setView('settings');
+            setAutoImport(true);
+          }
+          loadMe();
+        }}
+      />
+    );
 
   const logout = async () => {
     await api('/auth/logout', { method: 'POST' });
@@ -81,6 +94,7 @@ export default function App() {
           <Integrations notice={route.notice} onOpenSettings={() => setView('settings')} />
         ) : (
           <Settings
+            autoImport={autoImport && !me.business.websiteImportedAt}
             business={me.business}
             notifyEmail={me.user.notifyEmail}
             userPhone={me.user.phone}

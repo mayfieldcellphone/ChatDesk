@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import WebsiteImport from './WebsiteImport';
 import { api, DAYS, type Business, type Day, type SavedReply, type WeeklyHours } from '../api';
 
 interface Props {
@@ -53,18 +54,30 @@ function useBusinessSave(onSaved: (b: Business) => void) {
   return { save, status, busy };
 }
 
-export default function Settings(props: Props) {
+export default function Settings(props: Props & { autoImport?: boolean }) {
+  // Sections keep their own form state, so remount them after an import changes the saved values.
+  const [version, setVersion] = useState(0);
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
         <h1 className="text-xl font-semibold">Settings</h1>
-        <InstallSection business={props.business} />
-        <WidgetSection {...props} />
-        <HoursSection {...props} />
-        <PhoneSection {...props} />
-        <SavedRepliesSection />
-        <AiSection {...props} />
-        <NotificationsSection {...props} />
+        <WebsiteImport
+          business={props.business}
+          autoStart={Boolean(props.autoImport)}
+          onApplied={(business) => {
+            props.onSaved(business);
+            setVersion((v) => v + 1);
+          }}
+        />
+        <div key={version} className="space-y-6">
+          <InstallSection business={props.business} />
+          <WidgetSection {...props} />
+          <HoursSection {...props} />
+          <PhoneSection {...props} />
+          <SavedRepliesSection />
+          <AiSection {...props} />
+          <NotificationsSection {...props} />
+        </div>
       </div>
     </div>
   );

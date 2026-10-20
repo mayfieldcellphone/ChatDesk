@@ -12,6 +12,7 @@ Website chat widget + team inbox for local businesses, in the style of Birdeye W
 - **Saved replies**: one-click answers to common questions, with `{name}` and `{business}` filled in. Type `/` in the reply box.
 - **AI-suggested replies**: Claude drafts a reply from the conversation, your business info and saved replies, for you to check before sending.
 - **Alerts**: a sound and desktop notification while the inbox is open, and an email when nobody has it open.
+- **Set up from your website**: enter your website address and ChatDesk fills in your name, hours, colour, greetings, AI notes and saved replies for you to review.
 - **Multi-business**: each sign-up gets its own business, widget key, colour, greeting and SMS number.
 
 ## Run locally
@@ -69,8 +70,8 @@ a shared pub/sub (e.g. Redis) in `server/events.ts`.
 | `server/inbound.ts` | What happens when a customer message arrives: live update, away message, email alert |
 | `server/hours.ts` | Office hours and the open/closed check |
 | `server/ai.ts` | AI-suggested replies (Claude) |
-| `server/notify.ts` | Google reviews, Messenger, Instagram | `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and `META_APP_ID`/`META_APP_SECRET`/`META_VERIFY_TOKEN`. Guide: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
-| Email alerts |
+| `server/notify.ts` | Email alerts |
+| `server/website.ts` | Reads the business's website to pre-fill settings |
 | `server/events.ts` | Live updates (SSE) and "on your website" presence |
 | `server/auth.ts` | Sign-up / login with an httpOnly session cookie |
 | `server/db.ts` | SQLite schema and helpers |

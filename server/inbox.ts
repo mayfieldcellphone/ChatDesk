@@ -13,6 +13,7 @@ import { rateLimit } from './rateLimit';
 import { fetchRecording, makeCall, smsConfigured, twiml } from './twilio';
 import { defaultChannel, DeliveryError, replyChannels, sendToCustomer } from './outbound';
 import { reviewLink } from './google';
+import { proposeFromWebsite, WebsiteError } from './website';
 
 // Authenticated API for the team inbox. Every query is scoped to the signed-in user's business.
 export const inboxRouter = Router();
@@ -46,6 +47,8 @@ function publicBusiness(b: Business) {
     reviewLink: b.review_link,
     reviewLinkEffective: reviewLink(b),
     reviewRequestText: b.review_request_text,
+    websiteUrl: b.website_url,
+    websiteImportedAt: b.website_imported_at,
   };
 }
 
@@ -75,6 +78,23 @@ inboxRouter.patch('/me', (req, res) => {
     run('UPDATE users SET phone = ? WHERE id = ?', phone, userId);
   }
   res.json({ ok: true });
+});
+
+// Reads the business's website and proposes settings for the owner to review. Saves only the URL.
+inboxRouter.post('/business/website', rateLimit('website-import', 10, 60 * 60 * 1000), async (req, res) => {
+  const { businessId } = req.session!;
+  const url = String(req.body.url ?? '').trim().slice(0, 500);
+  if (!url) return res.status(400).json({ error: 'Enter your website address' });
+  try {
+    const result = await proposeFromWebsite(url);
+    run('UPDATE businesses SET website_url = ? WHERE id = ?', result.pages[0], businessId);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof WebsiteError) return res.status(400).json({ error: err.message });
+    const timedOut = (err as Error).name === 'TimeoutError' || (err as Error).name === 'AbortError';
+    console.error('Website import failed:', err);
+    res.status(502).json({ error: timedOut ? 'The website took too long to respond. Try again.' : 'Couldn’t read that website. Check the address and try again.' });
+  }
 });
 
 inboxRouter.patch('/business', (req, res) => {
@@ -136,6 +156,7 @@ inboxRouter.patch('/business', (req, res) => {
     return res.status(409).json({ error: 'That SMS number is already used by another business' });
   }
 
+  if (b.websiteImported === true) run('UPDATE businesses SET website_imported_at = ? WHERE id = ?', now(), businessId);
   run(
     `UPDATE businesses SET name = ?, greeting = ?, color = ?, sms_number = ?, hours_enabled = ?, timezone = ?,
        hours = ?, away_message = ?, ai_notes = ?, forward_number = ?, ring_seconds = ?, voicemail_greeting = ?,

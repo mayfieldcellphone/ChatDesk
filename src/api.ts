@@ -23,6 +23,8 @@ export interface Business {
   /** The link review requests use: the owner's own, or the one from Google Business Profile. */
   reviewLinkEffective: string | null;
   reviewRequestText: string;
+  websiteUrl: string | null;
+  websiteImportedAt: string | null;
 }
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
