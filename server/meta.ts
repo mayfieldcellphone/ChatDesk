@@ -47,7 +47,10 @@ export function metaAuthUrl(redirectUri: string, state: string) {
   url.searchParams.set('client_id', process.env.META_APP_ID!);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('state', state);
-  url.searchParams.set('scope', META_SCOPES.join(','));
+  // Business-type Meta apps use "Facebook Login for Business", which takes a configuration ID
+  // (permissions chosen in the app dashboard) instead of a scope list.
+  if (process.env.META_LOGIN_CONFIG_ID) url.searchParams.set('config_id', process.env.META_LOGIN_CONFIG_ID);
+  else url.searchParams.set('scope', META_SCOPES.join(','));
   url.searchParams.set('response_type', 'code');
   return url.toString();
 }
