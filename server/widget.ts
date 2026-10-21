@@ -8,6 +8,7 @@ import { isVisitorOnline, publish, subscribe } from './events';
 import { isOpen } from './hours';
 import { onInboundMessage } from './inbound';
 import { rateLimit } from './rateLimit';
+import { forwardLead, type LeadType } from './repairbill';
 
 // Public API used by the embeddable widget (public/widget.js) on customers' websites.
 export const widgetRouter = Router();
@@ -64,8 +65,54 @@ widgetRouter.get('/:key/config', (req, res) => {
     color: business.color,
     greeting: business.greeting,
     open: business.hours_enabled ? isOpen(business) : null,
+    position: business.widget_position,
+    offsetX: business.widget_offset_x,
+    offsetY: business.widget_offset_y,
+    // The menu shown before a chat starts. Chat is always available.
+    options: { quote: Boolean(business.widget_quote), callback: Boolean(business.widget_callback), callNumber: business.widget_call_number },
   });
 });
+
+interface Start {
+  name: string;
+  phone: string;
+  email: string | null;
+  pageUrl: string | null;
+  body: string;
+  kind: 'text' | 'quote' | 'callback';
+}
+
+/** Opens a new web conversation with the visitor's first message and hands back their secret token. */
+function startConversation(business: Business, start: Start) {
+  const contact = upsertContact(business.id, start.name, start.phone, start.email);
+  const t = now();
+  const conversation: Conversation = {
+    id: newId(), business_id: business.id, contact_id: contact.id, channel: 'webchat', status: 'open',
+    visitor_token: crypto.randomBytes(24).toString('base64url'), page_url: start.pageUrl,
+    unread_count: 0, last_message_at: t, created_at: t,
+  };
+  run(
+    `INSERT INTO conversations (id, business_id, contact_id, channel, status, visitor_token, page_url, last_message_at, created_at)
+     VALUES (?, ?, ?, 'webchat', 'open', ?, ?, ?, ?)`,
+    conversation.id, business.id, contact.id, conversation.visitor_token, start.pageUrl, t, t,
+  );
+  const message = insertMessage(conversation, 'in', 'webchat', start.body, { kind: start.kind });
+  onInboundMessage(business, conversation, message);
+  const leadType: LeadType = start.kind === 'text' ? 'contact' : start.kind;
+  forwardLead(business, {
+    type: leadType, name: start.name, phone: start.phone, email: start.email, message: start.body,
+    pageUrl: start.pageUrl, conversationId: conversation.id,
+  });
+  return {
+    conversationId: conversation.id,
+    visitorToken: conversation.visitor_token,
+    messages: [publicMessage(message)],
+  };
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const field = (value: unknown, max: number) => String(value ?? '').trim().slice(0, max);
+const CALLBACK_TIMES = ['As soon as possible', 'Morning', 'Afternoon', 'Evening'];
 
 widgetRouter.post('/:key/conversations', startLimit, (req, res) => {
   const business = loadBusiness(req, res);
@@ -81,26 +128,41 @@ widgetRouter.post('/:key/conversations', startLimit, (req, res) => {
   if (!body) return res.status(400).json({ error: 'Please enter a message' });
   if (tooLong(body)) return res.status(400).json({ error: 'Message is too long' });
 
-  const contact = upsertContact(business.id, name, phone, null);
-  const t = now();
-  const conversation: Conversation = {
-    id: newId(), business_id: business.id, contact_id: contact.id, channel: 'webchat', status: 'open',
-    visitor_token: crypto.randomBytes(24).toString('base64url'), page_url: pageUrl,
-    unread_count: 0, last_message_at: t, created_at: t,
-  };
-  run(
-    `INSERT INTO conversations (id, business_id, contact_id, channel, status, visitor_token, page_url, last_message_at, created_at)
-     VALUES (?, ?, ?, 'webchat', 'open', ?, ?, ?, ?)`,
-    conversation.id, business.id, contact.id, conversation.visitor_token, pageUrl, t, t,
-  );
-  const message = insertMessage(conversation, 'in', 'webchat', body);
-  onInboundMessage(business, conversation, message);
+  res.status(201).json(startConversation(business, { name, phone, email: null, pageUrl, body, kind: 'text' }));
+});
 
-  res.status(201).json({
-    conversationId: conversation.id,
-    visitorToken: conversation.visitor_token,
-    messages: [publicMessage(message)],
-  });
+/** "Get a quote" and "Request a call back" from the widget menu. They start a conversation like a chat does. */
+widgetRouter.post('/:key/requests', startLimit, (req, res) => {
+  const business = loadBusiness(req, res);
+  if (!business) return;
+  const type = req.body.type;
+  if ((type !== 'quote' || !business.widget_quote) && (type !== 'callback' || !business.widget_callback)) {
+    return res.status(400).json({ error: 'This request isn’t available' });
+  }
+
+  const name = field(req.body.name, 100);
+  const phone = normalizePhone(req.body.phone);
+  const email = field(req.body.email, 200).toLowerCase() || null;
+  const pageUrl = field(req.body.pageUrl, 500) || null;
+  if (!name) return res.status(400).json({ error: 'Please enter your name' });
+  if (!phone) return res.status(400).json({ error: 'Please enter a valid mobile number' });
+  if (email && !EMAIL.test(email)) return res.status(400).json({ error: 'Please check your email address' });
+
+  let lines: string[];
+  if (type === 'quote') {
+    const device = field(req.body.device, 120);
+    const issue = field(req.body.issue, MAX_MESSAGE);
+    if (!device) return res.status(400).json({ error: 'Please tell us the device or model' });
+    if (!issue) return res.status(400).json({ error: 'Please tell us what needs fixing' });
+    lines = ['Quote request', `Device: ${device}`, `Issue: ${issue}`];
+  } else {
+    const time = CALLBACK_TIMES.includes(req.body.time) ? req.body.time : CALLBACK_TIMES[0];
+    const note = field(req.body.note, MAX_MESSAGE);
+    lines = ['Please call me back', `Best time: ${time}`, ...(note ? [`About: ${note}`] : [])];
+  }
+  if (email) lines.push(`Email: ${email}`);
+
+  res.status(201).json(startConversation(business, { name, phone, email, pageUrl, body: lines.join('\n'), kind: type }));
 });
 
 widgetRouter.get('/:key/conversations/:id/messages', (req, res) => {

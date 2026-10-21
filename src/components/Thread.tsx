@@ -263,6 +263,14 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
                 <div className="mt-1 text-[11px] text-slate-400">{new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</div>
               </div>
             </div>
+          ) : m.kind === 'quote' || m.kind === 'callback' ? (
+            <div key={m.id} className="flex justify-start">
+              <div className="max-w-[85%] md:max-w-[70%] rounded-2xl rounded-bl-sm border border-blue-200 bg-blue-50 px-4 py-3">
+                <div className="mb-1 text-xs font-semibold text-blue-800">{m.kind === 'quote' ? '📋 Quote request' : '📞 Call back request'} · from the website</div>
+                <p className="whitespace-pre-wrap break-words text-sm text-slate-800">{m.body.split('\n').slice(1).join('\n')}</p>
+                <div className="mt-1 text-[11px] text-slate-400">{new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</div>
+              </div>
+            </div>
           ) : (
           <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
             <div className="max-w-[85%] md:max-w-[70%]">

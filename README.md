@@ -11,6 +11,8 @@ Website chat widget + team inbox for local businesses, in the style of Birdeye W
 - **Office hours & away message**: outside your hours, customers get an automatic reply and the widget shows you're away.
 - **Saved replies**: one-click answers to common questions, with `{name}` and `{business}` filled in. Type `/` in the reply box.
 - **AI-suggested replies**: Claude drafts a reply from the conversation, your business info and saved replies, for you to check before sending.
+- **Chat button & menu**: put the button bottom-left or bottom-right with your own spacing (so it doesn't cover another chat button), and offer *Get a quote*, *Request a call back* and *Call us now* next to chat. Quote and call-back requests land in the inbox like chats.
+- **RepairBill**: forward each new website enquiry to a RepairBill dashboard (Integrations → RepairBill), so a site needs only one chat widget.
 - **Phone app & notifications**: installs from the browser (Add to Home Screen) with push notifications for messages, calls, voicemails and reviews. See [docs/PHONE_APP.md](docs/PHONE_APP.md). Plus a chime while the inbox is open and email when nobody has it open.
 - **Set up from your website**: enter your website address and ChatDesk fills in your name, hours, colour, greetings, AI notes and saved replies for you to review.
 - **Several businesses, one login**: run several websites or shops from one login, each with its own widget, number, settings and connected accounts, plus an **All businesses** inbox.

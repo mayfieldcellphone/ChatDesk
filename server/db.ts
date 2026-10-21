@@ -157,6 +157,18 @@ addColumn(
   "TEXT NOT NULL DEFAULT 'Hi {name}, thanks for choosing {business}! If you have a minute, we''d really appreciate a quick review: {link}'",
 );
 
+// Widget placement and menu, and forwarding website enquiries to a RepairBill dashboard.
+addColumn('businesses', 'widget_position', "TEXT NOT NULL DEFAULT 'right'");
+addColumn('businesses', 'widget_offset_x', 'INTEGER NOT NULL DEFAULT 20');
+addColumn('businesses', 'widget_offset_y', 'INTEGER NOT NULL DEFAULT 20');
+addColumn('businesses', 'widget_quote', 'INTEGER NOT NULL DEFAULT 1');
+addColumn('businesses', 'widget_callback', 'INTEGER NOT NULL DEFAULT 1');
+addColumn('businesses', 'widget_call_number', 'TEXT');
+addColumn('businesses', 'repairbill_url', 'TEXT');
+addColumn('businesses', 'repairbill_key', 'TEXT');
+addColumn('businesses', 'repairbill_last_sent_at', 'TEXT');
+addColumn('businesses', 'repairbill_last_error', 'TEXT');
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS calls (
     id TEXT PRIMARY KEY,
@@ -262,6 +274,16 @@ export interface Business {
   review_request_text: string;
   website_url: string | null;
   website_imported_at: string | null;
+  widget_position: 'left' | 'right';
+  widget_offset_x: number;
+  widget_offset_y: number;
+  widget_quote: number;
+  widget_callback: number;
+  widget_call_number: string | null;
+  repairbill_url: string | null;
+  repairbill_key: string | null;
+  repairbill_last_sent_at: string | null;
+  repairbill_last_error: string | null;
   created_at: string;
 }
 
@@ -339,7 +361,8 @@ export interface Review {
   created_at: string;
 }
 
-export type MessageKind = 'text' | 'call' | 'voicemail';
+/** quote and callback: requests sent from the website widget's menu. */
+export type MessageKind = 'text' | 'call' | 'voicemail' | 'quote' | 'callback';
 
 export interface Call {
   id: string;

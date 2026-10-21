@@ -25,6 +25,17 @@ export interface Business {
   reviewRequestText: string;
   websiteUrl: string | null;
   websiteImportedAt: string | null;
+  widgetPosition: 'left' | 'right';
+  widgetOffsetX: number;
+  widgetOffsetY: number;
+  widgetQuote: boolean;
+  widgetCallback: boolean;
+  widgetCallNumber: string | null;
+  repairbillUrl: string | null;
+  /** Last characters of the saved RepairBill key, e.g. ••••a1b2. */
+  repairbillKeyHint: string | null;
+  repairbillLastSentAt: string | null;
+  repairbillLastError: string | null;
 }
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -83,7 +94,7 @@ export interface Message {
   body: string;
   author_name: string | null;
   automated: number;
-  kind: 'text' | 'call' | 'voicemail';
+  kind: 'text' | 'call' | 'voicemail' | 'quote' | 'callback';
   duration: number | null;
   created_at: string;
 }

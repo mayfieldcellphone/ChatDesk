@@ -57,7 +57,11 @@ export async function emailTeam(business: Business, conversation: Conversation, 
       ? { subject: `New voicemail from ${name}`, intro: `${who} left a voicemail for ${business.name}. Transcript:` }
       : message.kind === 'call'
         ? { subject: `Missed call from ${name}`, intro: `${who} called ${business.name} and hung up without leaving a voicemail.` }
-        : { subject: `New ${message.channel === 'sms' ? 'text' : 'web chat'} message from ${name}`, intro: `${who} wrote to ${business.name}:` };
+        : message.kind === 'quote'
+          ? { subject: `Quote request from ${name}`, intro: `${who} asked ${business.name} for a quote on the website:` }
+          : message.kind === 'callback'
+            ? { subject: `Call back ${name}`, intro: `${who} asked ${business.name} to call them back:` }
+            : { subject: `New ${message.channel === 'sms' ? 'text' : 'web chat'} message from ${name}`, intro: `${who} wrote to ${business.name}:` };
   const body = message.kind === 'call' ? '' : `\n\n${message.body}`;
 
   await mailer.sendMail({

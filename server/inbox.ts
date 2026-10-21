@@ -14,6 +14,7 @@ import { fetchRecording, makeCall, smsConfigured, twiml } from './twilio';
 import { defaultChannel, DeliveryError, replyChannels, sendToCustomer } from './outbound';
 import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
+import { normalizeRepairbillUrl, sendLead } from './repairbill';
 import { pushPublicKey, pushToBusiness } from './push';
 import { createBusiness, setSession } from './auth';
 import { isAdmin } from './config';
@@ -52,6 +53,17 @@ function publicBusiness(b: Business) {
     reviewRequestText: b.review_request_text,
     websiteUrl: b.website_url,
     websiteImportedAt: b.website_imported_at,
+    widgetPosition: b.widget_position,
+    widgetOffsetX: b.widget_offset_x,
+    widgetOffsetY: b.widget_offset_y,
+    widgetQuote: Boolean(b.widget_quote),
+    widgetCallback: Boolean(b.widget_callback),
+    widgetCallNumber: b.widget_call_number,
+    repairbillUrl: b.repairbill_url,
+    // The key is in the site's HTML anyway, but there's no need to show it again in full.
+    repairbillKeyHint: b.repairbill_key ? `••••${b.repairbill_key.slice(-4)}` : null,
+    repairbillLastSentAt: b.repairbill_last_sent_at,
+    repairbillLastError: b.repairbill_last_error,
   };
 }
 
@@ -211,7 +223,19 @@ inboxRouter.patch('/business', (req, res) => {
     return res.status(409).json({ error: 'That SMS number is already used by another business' });
   }
 
+  const widget = readWidgetSettings(b, business);
+  if ('error' in widget) return res.status(400).json({ error: widget.error });
+
   if (b.websiteImported === true) run('UPDATE businesses SET website_imported_at = ? WHERE id = ?', now(), businessId);
+  run(
+    `UPDATE businesses SET widget_position = ?, widget_offset_x = ?, widget_offset_y = ?, widget_quote = ?, widget_callback = ?,
+       widget_call_number = ?, repairbill_url = ?, repairbill_key = ? WHERE id = ?`,
+    widget.position, widget.offsetX, widget.offsetY, widget.quote, widget.callback, widget.callNumber,
+    widget.repairbillUrl, widget.repairbillKey, businessId,
+  );
+  if (widget.repairbillUrl !== business.repairbill_url || widget.repairbillKey !== business.repairbill_key) {
+    run('UPDATE businesses SET repairbill_last_sent_at = NULL, repairbill_last_error = NULL WHERE id = ?', businessId);
+  }
   run(
     `UPDATE businesses SET name = ?, greeting = ?, color = ?, sms_number = ?, hours_enabled = ?, timezone = ?,
        hours = ?, away_message = ?, ai_notes = ?, forward_number = ?, ring_seconds = ?, voicemail_greeting = ?,
@@ -220,6 +244,58 @@ inboxRouter.patch('/business', (req, res) => {
     forwardNumber, ringSeconds, voicemailGreeting, missedCallTextEnabled, missedCallText, reviewLinkValue, reviewRequestText, businessId,
   );
   res.json({ business: publicBusiness(loadBusiness(businessId)) });
+});
+
+/** Widget placement, menu and RepairBill forwarding fields of PATCH /business. Missing fields keep their value. */
+function readWidgetSettings(b: Record<string, unknown>, business: Business) {
+  const position = b.widgetPosition === undefined ? business.widget_position : b.widgetPosition;
+  if (position !== 'left' && position !== 'right') return { error: 'Position must be left or right' };
+  const offset = (value: unknown, current: number) => (value === undefined ? current : Math.round(Number(value)));
+  const offsetX = offset(b.widgetOffsetX, business.widget_offset_x);
+  const offsetY = offset(b.widgetOffsetY, business.widget_offset_y);
+  if (![offsetX, offsetY].every((n) => Number.isFinite(n) && n >= 0 && n <= 400)) {
+    return { error: 'Distances must be between 0 and 400 pixels' };
+  }
+  const flag = (value: unknown, current: number) => (value === undefined ? current : value ? 1 : 0);
+
+  let callNumber = business.widget_call_number;
+  if (b.widgetCallNumber !== undefined) {
+    callNumber = String(b.widgetCallNumber ?? '').trim().slice(0, 30) || null;
+    if (callNumber && !/^\+?[\d\s()-]{6,}$/.test(callNumber)) return { error: 'Enter the phone number for “Call us”, e.g. 02 4968 1234' };
+  }
+
+  let repairbillUrl = business.repairbill_url;
+  if (b.repairbillUrl !== undefined) {
+    const raw = String(b.repairbillUrl ?? '').trim();
+    repairbillUrl = raw ? normalizeRepairbillUrl(raw) : null;
+    if (raw && !repairbillUrl) return { error: 'Enter your RepairBill address, e.g. https://repairbill.shop' };
+  }
+  // An empty key keeps the saved one; disconnecting clears the address and key together.
+  let repairbillKey = business.repairbill_key;
+  if (typeof b.repairbillKey === 'string' && b.repairbillKey.trim()) repairbillKey = b.repairbillKey.trim().slice(0, 200);
+  if (!repairbillUrl) repairbillKey = null;
+  if (repairbillUrl && !repairbillKey) return { error: 'Paste the widget API key from RepairBill → Settings' };
+
+  return {
+    position, offsetX, offsetY, callNumber, repairbillUrl, repairbillKey,
+    quote: flag(b.widgetQuote, business.widget_quote),
+    callback: flag(b.widgetCallback, business.widget_callback),
+  };
+}
+
+/** Sends a sample enquiry to RepairBill so the owner can see it arrive. */
+inboxRouter.post('/business/repairbill/test', async (req, res) => {
+  const business = loadBusiness(req.session!.businessId);
+  if (!business.repairbill_url || !business.repairbill_key) return res.status(400).json({ error: 'Save your RepairBill address and key first' });
+  try {
+    await sendLead(business, {
+      type: 'contact', name: 'ChatDesk test', phone: null, email: null, pageUrl: null,
+      message: `Test from ChatDesk: website enquiries for ${business.name} will arrive here.`,
+    });
+    res.json({ business: publicBusiness(loadBusiness(business.id)) });
+  } catch (err) {
+    res.status(502).json({ error: (err as Error).message });
+  }
 });
 
 // ---------- Saved replies ----------

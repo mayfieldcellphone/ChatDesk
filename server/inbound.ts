@@ -25,7 +25,11 @@ export async function pushMessage(business: Business, conversation: Conversation
   const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id);
   const who = contact?.name ?? 'A customer';
   const body =
-    message.kind === 'voicemail' ? `🎙️ Voicemail: ${message.body}` : message.kind === 'call' ? '📞 Missed call' : `${CHANNEL_WORDS[message.channel]}: ${message.body}`;
+    message.kind === 'voicemail' ? `🎙️ Voicemail: ${message.body}`
+    : message.kind === 'call' ? '📞 Missed call'
+    : message.kind === 'quote' ? `📋 ${message.body.replace(/^Quote request\n/, 'Quote request: ').replace(/\n/g, ' · ')}`
+    : message.kind === 'callback' ? `📞 Call back request · ${message.body.split('\n').slice(1).join(' · ')}`
+    : `${CHANNEL_WORDS[message.channel]}: ${message.body}`;
   await pushToBusiness(business.id, {
     title: `${who} · ${business.name}`,
     body: body.slice(0, 200),

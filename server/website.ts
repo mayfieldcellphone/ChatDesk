@@ -47,7 +47,7 @@ function isPrivateAddress(ip: string) {
   return v6 === '::1' || v6 === '::' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80');
 }
 
-async function assertPublicHost(url: URL) {
+export async function assertPublicHost(url: URL) {
   if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new WebsiteError('Enter a website address starting with http:// or https://');
   // Local testing only: a comma-separated list of hostnames that may be private.
   if ((process.env.WEBSITE_FETCH_ALLOW_PRIVATE || '').split(',').map((h) => h.trim()).includes(url.hostname)) return;

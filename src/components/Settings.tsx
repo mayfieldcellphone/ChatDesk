@@ -73,6 +73,7 @@ export default function Settings(props: Props & { autoImport?: boolean }) {
         <div key={version} className="space-y-6">
           <InstallSection business={props.business} />
           <WidgetSection {...props} />
+          <WidgetLookSection {...props} />
           <HoursSection {...props} />
           <PhoneSection {...props} />
           <SavedRepliesSection />
@@ -145,6 +146,92 @@ function WidgetSection({ business, onSaved }: Props) {
         <div className="flex items-center gap-3">
           <button disabled={busy} className={primary}>Save</button>
           <StatusText status={status} />
+        </div>
+      </Card>
+    </form>
+  );
+}
+
+/** Where the chat button sits, and the menu visitors see before they start. */
+function WidgetLookSection({ business, onSaved }: Props) {
+  const [form, setForm] = useState({
+    widgetPosition: business.widgetPosition,
+    widgetOffsetX: business.widgetOffsetX,
+    widgetOffsetY: business.widgetOffsetY,
+    widgetQuote: business.widgetQuote,
+    widgetCallback: business.widgetCallback,
+    widgetCallNumber: business.widgetCallNumber ?? '',
+  });
+  const { save, status, busy } = useBusinessSave(onSaved);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    save(form);
+  };
+  const side = form.widgetPosition;
+  return (
+    <form onSubmit={submit}>
+      <Card title="Chat button & menu" description="Move the button if it sits on top of another one (e.g. Birdeye), and choose what visitors can ask for.">
+        <div className="flex flex-col gap-5 sm:flex-row">
+          <div className="flex-1 space-y-3">
+            <div>
+              <span className={label}>Position</span>
+              <div className="flex gap-2">
+                {(['left', 'right'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setForm({ ...form, widgetPosition: p })}
+                    className={`rounded-md border px-3 py-1.5 text-sm capitalize ${side === p ? 'border-blue-600 bg-blue-50 font-semibold text-blue-700' : 'border-slate-300'}`}
+                  >
+                    Bottom {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={label} htmlFor="offx">From the side (px)</label>
+                <input id="offx" type="number" min={0} max={400} className={input} value={form.widgetOffsetX} onChange={(e) => setForm({ ...form, widgetOffsetX: Number(e.target.value) })} />
+              </div>
+              <div>
+                <label className={label} htmlFor="offy">From the bottom (px)</label>
+                <input id="offy" type="number" min={0} max={400} className={input} value={form.widgetOffsetY} onChange={(e) => setForm({ ...form, widgetOffsetY: Number(e.target.value) })} />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">Tip: to sit above another chat button on the same side, set “From the bottom” to about 100.</p>
+          </div>
+          {/* Small preview of a page with the button where it will appear. */}
+          <div className="relative h-36 w-full shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 sm:w-44" aria-hidden>
+            <div className="m-3 h-2 w-20 rounded bg-slate-200" />
+            <div className="mx-3 h-2 w-28 rounded bg-slate-200" />
+            <div
+              className="absolute h-6 w-6 rounded-full shadow"
+              style={{ background: business.color, bottom: 4 + form.widgetOffsetY / 5, [side]: 4 + form.widgetOffsetX / 5 }}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2 border-t border-slate-100 pt-4">
+          <span className={label}>Menu options (Chat is always on)</span>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.widgetQuote} onChange={(e) => setForm({ ...form, widgetQuote: e.target.checked })} />
+            📋 Get a quote <span className="text-slate-400">(device + what needs fixing)</span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.widgetCallback} onChange={(e) => setForm({ ...form, widgetCallback: e.target.checked })} />
+            📞 Request a call back <span className="text-slate-400">(best time to call)</span>
+          </label>
+          <div>
+            <label className={label} htmlFor="callnum">☎️ “Call us now” number (leave empty to hide)</label>
+            <input id="callnum" className={input} placeholder="e.g. 02 4968 1234" value={form.widgetCallNumber} onChange={(e) => setForm({ ...form, widgetCallNumber: e.target.value })} />
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button disabled={busy} className={primary}>Save</button>
+          <StatusText status={status} />
+          <a href={`/demo.html?key=${encodeURIComponent(business.widgetKey)}`} target="_blank" rel="noreferrer" className="ml-auto text-sm text-blue-600 hover:underline">
+            Preview →
+          </a>
         </div>
       </Card>
     </form>
