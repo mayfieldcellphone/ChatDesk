@@ -13,11 +13,19 @@ if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh
 fi
 
+server_ip=$(curl -fsS4 https://api.ipify.org || true)
+
 if [ ! -f .env ]; then
   domain="${1:-}"
-  [ -n "$domain" ] || read -rp "Domain for ChatDesk (e.g. chatdesk.mayfieldphonerepair.com.au): " domain
+  free="${server_ip//./-}.sslip.io"
+  if [ -z "$domain" ]; then
+    echo "Which web address should ChatDesk use?"
+    echo "  Press Enter to use a free address that works straight away: $free"
+    read -rp "  Or type your own (its DNS must already point to $server_ip): " domain
+  fi
   domain="${domain#https://}"; domain="${domain#http://}"; domain="${domain%%/*}"
-  [ -n "$domain" ] || { echo "A domain is needed."; exit 1; }
+  [ -n "$domain" ] || domain="$free"
+  [ "$domain" != ".sslip.io" ] || { echo "Couldn't find this server's IP address. Run again with your domain: bash $0 chatdesk.example.com"; exit 1; }
   echo "==> Writing deploy/.env"
   umask 077
   cat > .env <<ENV
@@ -34,7 +42,6 @@ ENV
 fi
 set -a; . ./.env; set +a
 
-server_ip=$(curl -fsS4 https://api.ipify.org || true)
 dns_ip=$(getent ahostsv4 "$DOMAIN" | awk 'NR==1{print $1}' || true)
 if [ -n "$server_ip" ] && [ "$dns_ip" != "$server_ip" ]; then
   echo "!! $DOMAIN points to '${dns_ip:-nothing}', but this server is $server_ip."
