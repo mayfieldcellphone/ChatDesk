@@ -80,7 +80,7 @@ This pulls the latest version and restarts. Your data and settings are kept.
 - **Settings** are in `/opt/chatdesk/deploy/.env`. After editing, run the install command again.
 - **Data** is in the Docker volume `deploy_chatdesk-data`. Turn on VPS backups/snapshots in hPanel.
 - **Logs:** `cd /opt/chatdesk/deploy && docker compose logs -f app`
-- If something else already uses ports 80/443 on the VPS (another website or a panel), the installer stops and shows what it is.
+- If nginx already serves other websites on the VPS, ChatDesk is added to it as one more site (at `chatdesk.<your-ip>.sslip.io` by default) with its own certificate; the other sites are left alone. If some other program holds ports 80/443, the installer stops and names it.
 - After moving, update every callback URL to the new address: Twilio number webhooks, Meta webhook and
   redirect URI (`/api/integrations/meta/callback`), Google OAuth redirect (`/api/integrations/google/callback`),
   and the chat widget snippet on your websites.
