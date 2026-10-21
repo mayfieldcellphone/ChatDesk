@@ -6,9 +6,11 @@ interface Props {
   business: Business;
   lastEvent: InboxEvent | null;
   onChanged: () => void;
+  /** Back to the conversation list (phone layout). */
+  onBack: () => void;
 }
 
-export default function Thread({ conversationId, business, lastEvent, onChanged }: Props) {
+export default function Thread({ conversationId, business, lastEvent, onChanged, onBack }: Props) {
   const [conversation, setConversation] = useState<ConversationDetail | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState('');
@@ -182,7 +184,10 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-4 border-b border-slate-200 bg-white px-6 py-3">
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-white px-4 py-3 md:px-6">
+        <button onClick={onBack} className="-ml-1 text-xl text-slate-500 md:hidden" aria-label="Back to conversations">
+          ←
+        </button>
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             {renaming !== null ? (
@@ -239,9 +244,9 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
           {conversation.status === 'open' ? 'Close' : 'Reopen'}
         </button>
       </header>
-      {calling && <div className="border-b border-green-200 bg-green-50 px-6 py-2 text-sm text-green-800">{calling}</div>}
+      {calling && <div className="border-b border-green-200 bg-green-50 px-4 py-2 md:px-6 text-sm text-green-800">{calling}</div>}
 
-      <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-6 py-4">
+      <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4 md:px-6">
         {messages.map((m) =>
           m.kind === 'call' ? (
             <div key={m.id} className="flex justify-center">
@@ -251,7 +256,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
             </div>
           ) : m.kind === 'voicemail' ? (
             <div key={m.id} className="flex justify-start">
-              <div className="max-w-[70%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3">
+              <div className="max-w-[85%] md:max-w-[70%] rounded-2xl rounded-bl-sm border border-amber-200 bg-amber-50 px-4 py-3">
                 <div className="mb-2 text-xs font-semibold text-amber-800">🎙️ Voicemail{m.duration ? ` · ${Math.floor(m.duration / 60)}:${String(m.duration % 60).padStart(2, '0')}` : ''}</div>
                 <audio controls preload="none" src={`/api/recordings/${m.id}`} className="h-9 w-72 max-w-full" />
                 <p className="mt-2 whitespace-pre-wrap break-words text-sm text-slate-700">{m.body}</p>
@@ -260,7 +265,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
             </div>
           ) : (
           <div key={m.id} className={`flex ${m.direction === 'out' ? 'justify-end' : 'justify-start'}`}>
-            <div className="max-w-[70%]">
+            <div className="max-w-[85%] md:max-w-[70%]">
               <div
                 className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm ${
                   m.automated
@@ -283,7 +288,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
         <div ref={bottom} />
       </div>
 
-      <form onSubmit={send} className="relative border-t border-slate-200 bg-white p-4">
+      <form onSubmit={send} className="relative border-t border-slate-200 bg-white p-3 md:p-4">
         {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
         {pickerOpen && (
           <div className="absolute bottom-full left-4 right-4 mb-2 max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
@@ -398,7 +403,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged 
             }}
             rows={2}
             maxLength={1600}
-            placeholder="Type a reply… (Enter to send, Shift+Enter for a new line, / for saved replies)"
+            placeholder="Type a reply… (/ for saved replies)"
             className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           />
           <button

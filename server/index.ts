@@ -38,6 +38,11 @@ app.use('/api', (err: Error & { status?: number }, _req: Request, res: Response,
 
 if (process.env.NODE_ENV === 'production') {
   const dist = path.join(process.cwd(), 'dist');
+  // Browsers must always re-check the service worker, or the installed app could keep an old one.
+  app.use('/sw.js', (_req, res, next) => {
+    res.set('Cache-Control', 'no-cache');
+    next();
+  });
   app.use('/widget.js', (_req, res, next) => {
     res.set('Cache-Control', 'public, max-age=300');
     next();

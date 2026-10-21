@@ -1,28 +1,44 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, CHANNEL_LABELS, timeAgo, type Business, type ConversationSummary, type InboxEvent } from '../api';
-import { desktopAlertsSupported, playChime, showDesktopAlert } from '../alerts';
+import { api, CHANNEL_LABELS, timeAgo, type Business, type BusinessSummary, type ConversationSummary, type InboxEvent } from '../api';
+import { playChime, showDesktopAlert } from '../alerts';
+import { usePush } from '../push';
 import Thread from './Thread';
 
 interface Props {
   business: Business;
+  businesses: BusinessSummary[];
+  /** Conversation to open first (from a notification). */
+  initialConversationId: string | null;
+  onSwitchBusiness: (businessId: string) => Promise<void>;
+  /** Something changed (new message, read…), so unread counts elsewhere may be stale. */
+  onActivity: () => void;
   onOpenSettings: () => void;
 }
 
-export default function Inbox({ business, onOpenSettings }: Props) {
+export default function Inbox({ business, businesses, initialConversationId, onSwitchBusiness, onActivity, onOpenSettings }: Props) {
+  const multi = businesses.length > 1;
+  // With several businesses, start on the combined inbox.
+  const [scope, setScope] = useState<'all' | 'current'>(multi ? 'all' : 'current');
   const [status, setStatus] = useState<'open' | 'closed'>('open');
   const [query, setQuery] = useState('');
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialConversationId);
   const [lastEvent, setLastEvent] = useState<InboxEvent | null>(null);
   const [connected, setConnected] = useState(true);
-  const [alertPermission, setAlertPermission] = useState(desktopAlertsSupported() ? Notification.permission : 'denied');
+  const push = usePush();
 
   const loadList = useCallback(() => {
-    const params = new URLSearchParams({ status, q: query });
+    const params = new URLSearchParams({ status, q: query, scope: multi ? scope : 'current' });
     api<{ conversations: ConversationSummary[] }>(`/conversations?${params}`)
       .then((d) => setConversations(d.conversations))
       .catch(console.error);
-  }, [status, query]);
+  }, [status, query, scope, multi, business.id]);
+
+  // Conversations belong to a business; open that business first so replies and settings match.
+  const open = async (c: ConversationSummary) => {
+    if (c.businessId !== business.id) await onSwitchBusiness(c.businessId);
+    setSelectedId(c.id);
+  };
 
   useEffect(() => {
     const t = setTimeout(loadList, query ? 250 : 0);
@@ -36,6 +52,10 @@ export default function Inbox({ business, onOpenSettings }: Props) {
   selectedRef.current = selectedId;
   const conversationsRef = useRef(conversations);
   conversationsRef.current = conversations;
+  const activityRef = useRef(onActivity);
+  activityRef.current = onActivity;
+  const businessesRef = useRef(businesses);
+  businessesRef.current = businesses;
 
   const alertNewMessage = (event: Extract<InboxEvent, { type: 'message' }>) => {
     if (event.message.direction !== 'in') return;
@@ -44,7 +64,11 @@ export default function Inbox({ business, onOpenSettings }: Props) {
     playChime();
     if (document.hidden) {
       const name = conversationsRef.current.find((c) => c.id === event.conversationId)?.contactName ?? 'a customer';
-      showDesktopAlert(`New message from ${name}`, event.message.body, () => setSelectedId(event.conversationId));
+      const site = businessesRef.current.length > 1 ? businessesRef.current.find((b) => b.id === event.businessId)?.name : null;
+      showDesktopAlert(`New message from ${name}${site ? ` · ${site}` : ''}`, event.message.body, () => {
+        const c = conversationsRef.current.find((x) => x.id === event.conversationId);
+        if (c) open(c);
+      });
     }
   };
 
@@ -55,6 +79,7 @@ export default function Inbox({ business, onOpenSettings }: Props) {
     source.onmessage = (e) => {
       const event = JSON.parse(e.data) as InboxEvent;
       setLastEvent(event);
+      activityRef.current();
       if (event.type === 'message') alertNewMessage(event);
       if (event.type === 'presence') {
         setConversations((list) => list.map((c) => (c.id === event.conversationId ? { ...c, online: event.online } : c)));
@@ -72,19 +97,33 @@ export default function Inbox({ business, onOpenSettings }: Props) {
 
   return (
     <div className="flex h-full">
-      <section className="flex w-80 shrink-0 flex-col border-r border-slate-200 bg-white">
+      {/* On a phone, show the list or the open conversation, not both. */}
+      <section className={`${selectedId ? 'hidden md:flex' : 'flex'} w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-80`}>
         <div className="space-y-3 border-b border-slate-200 p-4">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-semibold">Inbox</h1>
             {!connected && <span className="text-xs text-amber-600">Reconnecting…</span>}
           </div>
-          {alertPermission === 'default' && (
+          {(push.state === 'off' || push.state === 'needs-install') && (
             <button
-              onClick={() => Notification.requestPermission().then(setAlertPermission)}
+              onClick={push.state === 'off' ? push.enable : onOpenSettings}
               className="w-full rounded-md bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 hover:bg-amber-100"
             >
-              🔔 Turn on desktop alerts so you don't miss new messages
+              🔔 {push.state === 'off' ? 'Turn on notifications on this device so you don’t miss messages' : 'Add ChatDesk to your Home Screen to get notifications (see Settings)'}
             </button>
+          )}
+          {multi && (
+            <div className="flex rounded-md bg-slate-100 p-1 text-sm">
+              {([['all', 'All businesses'], ['current', business.name]] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setScope(value)}
+                  className={`flex-1 truncate rounded px-2 py-1 ${scope === value ? 'bg-white font-medium shadow-sm' : 'text-slate-500'}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
           <div className="flex rounded-md bg-slate-100 p-1 text-sm">
             {(['open', 'closed'] as const).map((s) => (
@@ -123,7 +162,7 @@ export default function Inbox({ business, onOpenSettings }: Props) {
           {conversations.map((c) => (
             <li key={c.id}>
               <button
-                onClick={() => setSelectedId(c.id)}
+                onClick={() => open(c)}
                 className={`block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50 ${
                   selectedId === c.id ? 'bg-blue-50' : ''
                 }`}
@@ -133,6 +172,12 @@ export default function Inbox({ business, onOpenSettings }: Props) {
                   {c.online && <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" title="On your website now" />}
                   <span className="ml-auto shrink-0 text-xs text-slate-400">{timeAgo(c.lastMessageAt)}</span>
                 </div>
+                {multi && scope === 'all' && (
+                  <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
+                    <span className="h-2 w-2 rounded-full" style={{ background: c.businessColor }} />
+                    {c.businessName}
+                  </div>
+                )}
                 <div className="mt-0.5 flex items-center gap-2">
                   <span className={`truncate text-xs ${c.unreadCount ? 'text-slate-800' : 'text-slate-500'}`}>
                     {c.lastDirection === 'out' && 'You: '}
@@ -150,9 +195,9 @@ export default function Inbox({ business, onOpenSettings }: Props) {
           ))}
         </ul>
       </section>
-      <section className="min-w-0 flex-1">
+      <section className={`${selectedId ? 'block' : 'hidden md:block'} min-w-0 flex-1`}>
         {selectedId ? (
-          <Thread key={selectedId} conversationId={selectedId} business={business} lastEvent={lastEvent} onChanged={loadList} />
+          <Thread key={selectedId} conversationId={selectedId} business={business} lastEvent={lastEvent} onChanged={loadList} onBack={() => setSelectedId(null)} />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-slate-400">Select a conversation</div>
         )}

@@ -5,7 +5,7 @@ import {
 } from './db';
 import { publish } from './events';
 import { isOpen } from './hours';
-import { onInboundMessage } from './inbound';
+import { onInboundMessage, pushMessage } from './inbound';
 import { emailTeam } from './notify';
 import { phoneConversation } from './phone';
 import { replyChannels, sendToCustomer } from './outbound';
@@ -162,6 +162,7 @@ voiceRouter.post('/status', (req, res) => {
       const message = latest?.message_id && get<Message>('SELECT * FROM messages WHERE id = ?', latest.message_id);
       if (!latest || latest.has_voicemail || !message) return;
       emailTeam(business, conversation, message).catch((err) => console.error('Email alert failed:', err));
+      pushMessage(business, conversation, message).catch((err) => console.error('Push failed:', err));
     }, VOICEMAIL_GRACE_MS).unref();
   }
 });

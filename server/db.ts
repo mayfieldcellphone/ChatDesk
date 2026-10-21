@@ -214,6 +214,28 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS reviews_business ON reviews(business_id, review_updated_at);
+
+  -- One login can run several businesses (e.g. several websites). users.business_id is the one
+  -- they last had open.
+  CREATE TABLE IF NOT EXISTS memberships (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, business_id)
+  );
+  INSERT OR IGNORE INTO memberships (user_id, business_id, created_at) SELECT id, business_id, created_at FROM users;
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  -- Server-wide values ChatDesk generates for itself (e.g. push notification keys).
+  CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
 
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram';

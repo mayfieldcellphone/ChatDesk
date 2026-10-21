@@ -5,3 +5,12 @@ body,
 #root {
   height: 100%;
 }
+
+/* iPhone zooms into any text box under 16px when tapped; keep them at 16px on phones. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}

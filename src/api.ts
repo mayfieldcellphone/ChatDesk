@@ -31,7 +31,15 @@ export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 export type Day = (typeof DAYS)[number];
 export type WeeklyHours = Record<Day, { open: string; close: string } | null>;
 
+export interface BusinessSummary {
+  id: string;
+  name: string;
+  color: string;
+  unread: number;
+}
+
 export interface Me {
+  businesses: BusinessSummary[];
   user: { id: string; name: string; email: string; notifyEmail: boolean; phone: string | null };
   business: Business;
 }
@@ -62,6 +70,9 @@ export interface ConversationSummary {
   lastDirection: 'in' | 'out' | null;
   contactName: string;
   contactPhone: string | null;
+  businessId: string;
+  businessName: string;
+  businessColor: string;
   online: boolean;
 }
 
@@ -90,14 +101,15 @@ export interface ConversationDetail {
 }
 
 /** Events pushed over /api/stream. */
-export type InboxEvent =
+export type InboxEvent = (
   | { type: 'message'; conversationId: string; message: Message }
   | { type: 'message-updated'; conversationId: string; message: Message }
   | { type: 'read'; conversationId: string }
   | { type: 'contact'; contactId: string; conversationId?: undefined }
   | { type: 'status'; conversationId: string; status: 'open' | 'closed' }
   | { type: 'presence'; conversationId: string; online: boolean }
-  | { type: 'review'; count: number; conversationId?: undefined };
+  | { type: 'review'; count: number; conversationId?: undefined }
+) & { /** Which business the event is for (the stream follows all of them). */ businessId: string };
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {

@@ -34,7 +34,7 @@ function readCookie(req: Request, name: string) {
   return undefined;
 }
 
-function setSession(res: Response, session: Session) {
+export function setSession(res: Response, session: Session) {
   const token = jwt.sign(session, secret, { expiresIn: `${SESSION_DAYS}d` });
   res.cookie(COOKIE, token, {
     httpOnly: true,
@@ -65,7 +65,7 @@ export function readSession(req: Request): Session | null {
   try {
     const { userId, businessId } = jwt.verify(token, secret) as Session;
     // The user may have been deleted since the cookie was issued.
-    return get('SELECT id FROM users WHERE id = ? AND business_id = ?', userId, businessId) ? { userId, businessId } : null;
+    return get('SELECT 1 AS ok FROM memberships WHERE user_id = ? AND business_id = ?', userId, businessId) ? { userId, businessId } : null;
   } catch {
     return null;
   }
@@ -96,25 +96,20 @@ authRouter.post('/signup', async (req, res) => {
     return res.status(409).json({ error: 'An account with that email already exists' });
   }
 
-  const business: Pick<Business, 'id' | 'name' | 'widget_key'> = {
-    id: newId(),
-    name: businessName,
-    widget_key: crypto.randomBytes(12).toString('base64url'),
-  };
   const userId = newId();
   const hash = await bcrypt.hash(password, 12);
-  // Optional: the inbox offers to fill in settings from this website straight after sign-up.
-  const website = str(req.body.website).slice(0, 500) || null;
+  const businessId = newId();
   run(
     'INSERT INTO businesses (id, name, widget_key, website_url, created_at) VALUES (?, ?, ?, ?, ?)',
-    business.id, business.name, business.widget_key, website, now(),
+    businessId, businessName, crypto.randomBytes(12).toString('base64url'), str(req.body.website).slice(0, 500) || null, now(),
   );
   run(
     'INSERT INTO users (id, business_id, name, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-    userId, business.id, name, email, hash, now(),
+    userId, businessId, name, email, hash, now(),
   );
+  run('INSERT INTO memberships (user_id, business_id, created_at) VALUES (?, ?, ?)', userId, businessId, now());
 
-  setSession(res, { userId, businessId: business.id });
+  setSession(res, { userId, businessId });
   res.status(201).json({ ok: true });
 });
 
@@ -128,7 +123,40 @@ authRouter.post('/login', async (req, res) => {
   if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ error: 'Wrong email or password' });
   }
-  setSession(res, { userId: user.id, businessId: user.business_id });
+  // Open the business they last used, or any they still belong to.
+  const businessId = get('SELECT 1 AS ok FROM memberships WHERE user_id = ? AND business_id = ?', user.id, user.business_id)
+    ? user.business_id
+    : get<{ business_id: string }>('SELECT business_id FROM memberships WHERE user_id = ? ORDER BY created_at LIMIT 1', user.id)?.business_id;
+  if (!businessId) return res.status(403).json({ error: 'This login isn’t part of any business.' });
+  setSession(res, { userId: user.id, businessId });
+  res.json({ ok: true });
+});
+
+/** Creates a new business owned by the user (used for sign-up's first business and "Add a business"). */
+// New businesses get distinct colours so they're easy to tell apart in the combined inbox.
+const PALETTE = ['#2563eb', '#16a34a', '#db2777', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
+
+export function createBusiness(userId: string, name: string, website: string | null) {
+  const businessId = newId();
+  const count = get<{ n: number }>('SELECT COUNT(*) AS n FROM memberships WHERE user_id = ?', userId)?.n ?? 0;
+  run(
+    'INSERT INTO businesses (id, name, widget_key, website_url, color, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    businessId, name, crypto.randomBytes(12).toString('base64url'), website, PALETTE[count % PALETTE.length], now(),
+  );
+  run('INSERT INTO memberships (user_id, business_id, created_at) VALUES (?, ?, ?)', userId, businessId, now());
+  return businessId;
+}
+
+/** Switches the signed-in user to another of their businesses. */
+authRouter.post('/switch', (req, res) => {
+  const session = readSession(req);
+  if (!session) return res.status(401).json({ error: 'Not signed in' });
+  const businessId = str(req.body.businessId);
+  if (!get('SELECT 1 AS ok FROM memberships WHERE user_id = ? AND business_id = ?', session.userId, businessId)) {
+    return res.status(404).json({ error: 'Business not found' });
+  }
+  run('UPDATE users SET business_id = ? WHERE id = ?', businessId, session.userId);
+  setSession(res, { userId: session.userId, businessId });
   res.json({ ok: true });
 });
 

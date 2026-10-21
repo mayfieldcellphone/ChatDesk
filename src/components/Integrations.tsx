@@ -114,7 +114,7 @@ export default function Integrations({ notice, onOpenSettings }: Props) {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-6 md:py-8">
         <div>
           <h1 className="text-xl font-semibold">Integrations</h1>
           <p className="text-sm text-slate-500">Connect your accounts so messages and reviews come into ChatDesk.</p>

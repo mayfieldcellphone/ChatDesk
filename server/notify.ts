@@ -6,6 +6,12 @@ const ALERT_REPEAT_MS = 15 * 60 * 1000;
 
 export const emailConfigured = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
 
+const alertRecipients = (businessId: string) =>
+  all<{ email: string }>(
+    'SELECT u.email FROM users u JOIN memberships m ON m.user_id = u.id WHERE m.business_id = ? AND u.notify_email = 1',
+    businessId,
+  );
+
 let transport: Transporter | null | undefined;
 function getTransport() {
   if (transport === undefined) {
@@ -33,7 +39,7 @@ export async function emailTeam(business: Business, conversation: Conversation, 
   const fresh = get<{ last_email_alert_at: string | null }>('SELECT last_email_alert_at FROM conversations WHERE id = ?', conversation.id);
   if (fresh?.last_email_alert_at && Date.now() - Date.parse(fresh.last_email_alert_at) < ALERT_REPEAT_MS) return;
 
-  const recipients = all<{ email: string }>('SELECT email FROM users WHERE business_id = ? AND notify_email = 1', business.id);
+  const recipients = alertRecipients(business.id);
   if (recipients.length === 0) return;
   run('UPDATE conversations SET last_email_alert_at = ? WHERE id = ?', now(), conversation.id);
 
@@ -61,7 +67,7 @@ export async function emailTeam(business: Business, conversation: Conversation, 
 export async function emailReviewAlert(business: Business, reviews: Review[]) {
   const mailer = getTransport();
   if (!mailer || reviews.length === 0) return;
-  const recipients = all<{ email: string }>('SELECT email FROM users WHERE business_id = ? AND notify_email = 1', business.id);
+  const recipients = alertRecipients(business.id);
   if (recipients.length === 0) return;
 
   const stars = (n: number) => '★'.repeat(n) + '☆'.repeat(5 - n);

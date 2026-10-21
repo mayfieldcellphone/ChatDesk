@@ -11,9 +11,9 @@ Website chat widget + team inbox for local businesses, in the style of Birdeye W
 - **Office hours & away message**: outside your hours, customers get an automatic reply and the widget shows you're away.
 - **Saved replies**: one-click answers to common questions, with `{name}` and `{business}` filled in. Type `/` in the reply box.
 - **AI-suggested replies**: Claude drafts a reply from the conversation, your business info and saved replies, for you to check before sending.
-- **Alerts**: a sound and desktop notification while the inbox is open, and an email when nobody has it open.
+- **Phone app & notifications**: installs from the browser (Add to Home Screen) with push notifications for messages, calls, voicemails and reviews. See [docs/PHONE_APP.md](docs/PHONE_APP.md). Plus a chime while the inbox is open and email when nobody has it open.
 - **Set up from your website**: enter your website address and ChatDesk fills in your name, hours, colour, greetings, AI notes and saved replies for you to review.
-- **Multi-business**: each sign-up gets its own business, widget key, colour, greeting and SMS number.
+- **Several businesses, one login**: run several websites or shops from one login, each with its own widget, number, settings and connected accounts, plus an **All businesses** inbox.
 
 ## Run locally
 
@@ -71,6 +71,7 @@ a shared pub/sub (e.g. Redis) in `server/events.ts`.
 | `server/hours.ts` | Office hours and the open/closed check |
 | `server/ai.ts` | AI-suggested replies (Claude) |
 | `server/notify.ts` | Email alerts |
+| `server/push.ts`, `public/sw.js` | Push notifications (keys generated automatically) and the installable app's service worker |
 | `server/website.ts` | Reads the business's website to pre-fill settings |
 | `server/events.ts` | Live updates (SSE) and "on your website" presence |
 | `server/auth.ts` | Sign-up / login with an httpOnly session cookie |
@@ -79,5 +80,5 @@ a shared pub/sub (e.g. Redis) in `server/events.ts`.
 
 ## Ideas for next
 
-One login managing several businesses (for agencies), automatic review requests after a job, team
-members, and mobile push notifications.
+Automatic review requests after a job, team members with their own logins, and App Store / Google Play
+builds of the phone app.

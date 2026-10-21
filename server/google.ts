@@ -2,6 +2,7 @@ import { decrypt, encrypt } from './crypto';
 import { all, get, newId, now, run, type Business, type Connection, type Review } from './db';
 import { publish } from './events';
 import { emailReviewAlert } from './notify';
+import { pushToBusiness } from './push';
 
 // Google Business Profile: connect locations, sync reviews, reply to them.
 // Setup (Google Cloud project + Business Profile API access): docs/INTEGRATIONS.md.
@@ -187,6 +188,13 @@ export async function syncReviews(connection: Connection) {
   if (added.length > 0) {
     publish(`biz:${business.id}`, { type: 'review', count: added.length });
     emailReviewAlert(business, added).catch((err) => console.error('Review email failed:', err));
+    const first = added[0];
+    pushToBusiness(business.id, {
+      title: added.length === 1 ? `New ${first.rating}★ review · ${business.name}` : `${added.length} new reviews · ${business.name}`,
+      body: added.length === 1 ? `${first.author_name}: ${first.comment || '(rating only)'}`.slice(0, 200) : added.map((r) => `${r.rating}★ ${r.author_name}`).join(', '),
+      url: `/?business=${business.id}&view=reviews`,
+      tag: `reviews-${business.id}`,
+    }).catch((err) => console.error('Push failed:', err));
   }
   return added.length;
 }

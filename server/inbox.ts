@@ -14,6 +14,8 @@ import { fetchRecording, makeCall, smsConfigured, twiml } from './twilio';
 import { defaultChannel, DeliveryError, replyChannels, sendToCustomer } from './outbound';
 import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
+import { pushPublicKey, pushToBusiness } from './push';
+import { createBusiness, setSession } from './auth';
 
 // Authenticated API for the team inbox. Every query is scoped to the signed-in user's business.
 export const inboxRouter = Router();
@@ -60,10 +62,62 @@ inboxRouter.get('/me', (req, res) => {
     'SELECT id, name, email, notify_email, phone FROM users WHERE id = ?',
     userId,
   )!;
+  const businesses = all<{ id: string; name: string; color: string; unread: number }>(
+    `SELECT b.id, b.name, b.color,
+            (SELECT COALESCE(SUM(c.unread_count), 0) FROM conversations c WHERE c.business_id = b.id AND c.status = 'open') AS unread
+       FROM memberships m JOIN businesses b ON b.id = m.business_id WHERE m.user_id = ? ORDER BY b.created_at`,
+    userId,
+  );
   res.json({
+    businesses,
     user: { id: user.id, name: user.name, email: user.email, notifyEmail: Boolean(user.notify_email), phone: user.phone },
     business: publicBusiness(loadBusiness(businessId)),
   });
+});
+
+// Adds another business (e.g. another website) to this login and switches to it.
+inboxRouter.post('/businesses', (req, res) => {
+  const { userId } = req.session!;
+  const name = String(req.body.name ?? '').trim().slice(0, 100);
+  if (!name) return res.status(400).json({ error: 'Enter the business name' });
+  if ((get<{ n: number }>('SELECT COUNT(*) AS n FROM memberships WHERE user_id = ?', userId)?.n ?? 0) >= 25) {
+    return res.status(400).json({ error: 'You can run up to 25 businesses from one login' });
+  }
+  const website = String(req.body.website ?? '').trim().slice(0, 500) || null;
+  const businessId = createBusiness(userId, name, website);
+  run('UPDATE users SET business_id = ? WHERE id = ?', businessId, userId);
+  setSession(res, { userId, businessId });
+  res.status(201).json({ businessId });
+});
+
+// ---------- Push notifications ----------
+
+inboxRouter.get('/push/key', (_req, res) => res.json({ publicKey: pushPublicKey() }));
+
+inboxRouter.post('/push/subscribe', (req, res) => {
+  const sub = req.body.subscription as { endpoint?: string; keys?: { p256dh?: string; auth?: string } } | undefined;
+  if (!sub?.endpoint || !/^https:\/\//.test(sub.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth) {
+    return res.status(400).json({ error: 'Invalid push subscription' });
+  }
+  // A device belongs to whoever subscribed it last.
+  run('DELETE FROM push_subscriptions WHERE endpoint = ?', sub.endpoint);
+  run(
+    'INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    newId(), req.session!.userId, sub.endpoint.slice(0, 1000), sub.keys.p256dh.slice(0, 200), sub.keys.auth.slice(0, 100), now(),
+  );
+  res.status(201).json({ ok: true });
+});
+
+inboxRouter.delete('/push/subscribe', (req, res) => {
+  run('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?', String(req.body.endpoint ?? ''), req.session!.userId);
+  res.json({ ok: true });
+});
+
+inboxRouter.post('/push/test', rateLimit('push-test', 10, 10 * 60 * 1000), async (req, res) => {
+  const { businessId } = req.session!;
+  const business = loadBusiness(businessId);
+  await pushToBusiness(businessId, { title: `ChatDesk · ${business.name}`, body: 'Notifications are working 🎉', url: '/', tag: 'test' });
+  res.json({ ok: true });
 });
 
 inboxRouter.patch('/me', (req, res) => {
@@ -214,17 +268,23 @@ inboxRouter.get('/conversations', (req, res) => {
   const { businessId } = req.session!;
   const status = req.query.status === 'closed' ? 'closed' : 'open';
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  // scope=all lists every business this login runs; otherwise just the open one.
+  const businessIds =
+    req.query.scope === 'all'
+      ? all<{ business_id: string }>('SELECT business_id FROM memberships WHERE user_id = ?', req.session!.userId).map((m) => m.business_id)
+      : [businessId];
+  const placeholders = businessIds.map(() => '?').join(', ');
 
-  const rows = all<Conversation & { contact_name: string; contact_phone: string | null; last_body: string | null; last_direction: string | null }>(
-    `SELECT c.*, ct.name AS contact_name, ct.phone AS contact_phone,
+  const rows = all<Conversation & { contact_name: string; contact_phone: string | null; last_body: string | null; last_direction: string | null; business_name: string; business_color: string }>(
+    `SELECT c.*, ct.name AS contact_name, ct.phone AS contact_phone, b.name AS business_name, b.color AS business_color,
             (SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_body,
             (SELECT direction FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_direction
-       FROM conversations c JOIN contacts ct ON ct.id = c.contact_id
-      WHERE c.business_id = ? AND c.status = ?
+       FROM conversations c JOIN contacts ct ON ct.id = c.contact_id JOIN businesses b ON b.id = c.business_id
+      WHERE c.business_id IN (${placeholders}) AND c.status = ?
         AND (? = '' OR ct.name LIKE ? OR ct.phone LIKE ? OR ct.email LIKE ?)
       ORDER BY c.last_message_at DESC
       LIMIT 200`,
-    businessId, status, q, `%${q}%`, `%${q}%`, `%${q}%`,
+    ...businessIds, status, q, `%${q}%`, `%${q}%`, `%${q}%`,
   );
 
   res.json({
@@ -238,6 +298,9 @@ inboxRouter.get('/conversations', (req, res) => {
       lastDirection: r.last_direction,
       contactName: r.contact_name,
       contactPhone: r.contact_phone,
+      businessId: r.business_id,
+      businessName: r.business_name,
+      businessColor: r.business_color,
       online: isVisitorOnline(r.id),
     })),
   });
@@ -431,6 +494,8 @@ inboxRouter.patch('/conversations/:id', (req, res) => {
   res.json({ ok: true });
 });
 
+// One live connection follows every business this login runs, for the combined inbox and alerts.
 inboxRouter.get('/stream', (req, res) => {
-  subscribe(`biz:${req.session!.businessId}`, req, res);
+  const ids = all<{ business_id: string }>('SELECT business_id FROM memberships WHERE user_id = ?', req.session!.userId).map((m) => m.business_id);
+  subscribe(ids.map((id) => `biz:${id}`), req, res);
 });

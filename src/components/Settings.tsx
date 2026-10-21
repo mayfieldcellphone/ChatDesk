@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import WebsiteImport from './WebsiteImport';
+import PushControls from './PushControls';
 import { api, DAYS, type Business, type Day, type SavedReply, type WeeklyHours } from '../api';
 
 interface Props {
@@ -59,7 +60,7 @@ export default function Settings(props: Props & { autoImport?: boolean }) {
   const [version, setVersion] = useState(0);
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-2xl space-y-6 px-6 py-8">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-6 md:py-8">
         <h1 className="text-xl font-semibold">Settings</h1>
         <WebsiteImport
           business={props.business}
@@ -435,8 +436,9 @@ function NotificationsSection({ business, notifyEmail, onNotifyEmailChange }: Pr
   return (
     <Card
       title="Notifications"
-      description="While the inbox is open you get a sound, plus a desktop alert if the tab is in the background. Email covers the times nobody has it open."
+      description="Turn on notifications on each phone and computer you use. While the inbox is open you also get a sound. Email covers the times nobody has it open."
     >
+      <PushControls />
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={notifyEmail} disabled={!business.emailAvailable} onChange={(e) => toggle(e.target.checked)} className="h-4 w-4" />
         Email me when a customer messages and nobody has the inbox open
