@@ -3,6 +3,7 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 import { aiConfigured } from './ai';
 import { DAYS, validateHours, validTimezone, type Day, type WeeklyHours } from './hours';
+import { config } from './config';
 
 // Reads a business's website to pre-fill ChatDesk's settings. Structured data (schema.org JSON-LD,
 // meta tags, tel: links) is read directly; when an Anthropic key is set, Claude turns the page text
@@ -311,8 +312,8 @@ const SCHEMA = {
 } as const;
 
 async function draftWithClaude(pages: PageFacts[], facts: ReturnType<typeof structuredFacts>) {
-  const client = new Anthropic();
-  const model = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5';
+  const client = new Anthropic({ apiKey: config('ANTHROPIC_API_KEY') });
+  const model = config('ANTHROPIC_MODEL') || 'claude-opus-5-5';
   const fallback = ['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5'].includes(model);
   let budget = 40_000;
   const corpus = pages

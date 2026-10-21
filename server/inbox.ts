@@ -16,6 +16,7 @@ import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
 import { pushPublicKey, pushToBusiness } from './push';
 import { createBusiness, setSession } from './auth';
+import { isAdmin } from './config';
 
 // Authenticated API for the team inbox. Every query is scoped to the signed-in user's business.
 export const inboxRouter = Router();
@@ -70,7 +71,7 @@ inboxRouter.get('/me', (req, res) => {
   );
   res.json({
     businesses,
-    user: { id: user.id, name: user.name, email: user.email, notifyEmail: Boolean(user.notify_email), phone: user.phone },
+    user: { id: user.id, name: user.name, email: user.email, notifyEmail: Boolean(user.notify_email), phone: user.phone, isAdmin: isAdmin(user.id) },
     business: publicBusiness(loadBusiness(businessId)),
   });
 });

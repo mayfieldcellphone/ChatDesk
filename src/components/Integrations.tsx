@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, timeAgo } from '../api';
+import ServerKeys from './ServerKeys';
 
 interface Connection {
   id: string;
@@ -44,7 +45,7 @@ function SetupNote({ children }: { children: ReactNode }) {
   return <div className="rounded-md bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">{children}</div>;
 }
 
-export default function Integrations({ notice, onOpenSettings }: Props) {
+export default function Integrations({ notice, onOpenSettings, isAdmin }: Props & { isAdmin: boolean }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -118,6 +119,11 @@ export default function Integrations({ notice, onOpenSettings }: Props) {
         <div>
           <h1 className="text-xl font-semibold">Integrations</h1>
           <p className="text-sm text-slate-500">Connect your accounts so messages and reviews come into ChatDesk.</p>
+          {isAdmin && (
+            <a href="#server-keys" className="text-sm text-blue-600 hover:underline">
+              Enter API keys (Server keys) ↓
+            </a>
+          )}
         </div>
         {notice && (
           <p className={`rounded-md px-4 py-3 text-sm ${notice.ok ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>{notice.text}</p>
@@ -167,6 +173,8 @@ export default function Integrations({ notice, onOpenSettings }: Props) {
         <Card icon="🌐" title="Website chat" description="The chat bubble on your website. Always on.">
           <button onClick={onOpenSettings} className="text-sm text-blue-600 hover:underline">Get the install code in Settings →</button>
         </Card>
+
+        {isAdmin && <div id="server-keys"><ServerKeys onChanged={load} /></div>}
 
         {!status.publicUrlSet && <SetupNote>PUBLIC_URL isn’t set on the server, so connections can’t finish signing in.</SetupNote>}
       </div>

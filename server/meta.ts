@@ -7,6 +7,7 @@ import {
 } from './db';
 import { publish } from './events';
 import { onInboundMessage } from './inbound';
+import { config } from './config';
 
 // Facebook Messenger and Instagram messaging, via a Meta app using Facebook Login.
 // Setup: docs/INTEGRATIONS.md.
@@ -15,7 +16,7 @@ const version = () => process.env.META_GRAPH_VERSION || 'v25.0';
 const graphBase = () => (process.env.META_GRAPH_BASE || 'https://graph.facebook.com').replace(/\/$/, ''); // overridable for tests
 const graphUrl = (path: string) => `${graphBase()}/${version()}${path}`;
 
-export const metaConfigured = () => Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET && process.env.META_VERIFY_TOKEN);
+export const metaConfigured = () => Boolean(config('META_APP_ID') && config('META_APP_SECRET') && config('META_VERIFY_TOKEN'));
 
 export const META_SCOPES = [
   'pages_show_list',
@@ -44,12 +45,12 @@ async function graph<T>(path: string, init: { method?: string; token?: string; p
 
 export function metaAuthUrl(redirectUri: string, state: string) {
   const url = new URL(`https://www.facebook.com/${version()}/dialog/oauth`);
-  url.searchParams.set('client_id', process.env.META_APP_ID!);
+  url.searchParams.set('client_id', config('META_APP_ID')!);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('state', state);
   // Business-type Meta apps use "Facebook Login for Business", which takes a configuration ID
   // (permissions chosen in the app dashboard) instead of a scope list.
-  if (process.env.META_LOGIN_CONFIG_ID) url.searchParams.set('config_id', process.env.META_LOGIN_CONFIG_ID);
+  if (config('META_LOGIN_CONFIG_ID')) url.searchParams.set('config_id', config('META_LOGIN_CONFIG_ID')!);
   else url.searchParams.set('scope', META_SCOPES.join(','));
   url.searchParams.set('response_type', 'code');
   return url.toString();
@@ -68,13 +69,13 @@ interface PageInfo {
  */
 export async function connectMetaAccounts(businessId: string, code: string, redirectUri: string) {
   const short = await graph<{ access_token: string }>('/oauth/access_token', {
-    params: { client_id: process.env.META_APP_ID!, client_secret: process.env.META_APP_SECRET!, redirect_uri: redirectUri, code },
+    params: { client_id: config('META_APP_ID')!, client_secret: config('META_APP_SECRET')!, redirect_uri: redirectUri, code },
   });
   const long = await graph<{ access_token: string }>('/oauth/access_token', {
     params: {
       grant_type: 'fb_exchange_token',
-      client_id: process.env.META_APP_ID!,
-      client_secret: process.env.META_APP_SECRET!,
+      client_id: config('META_APP_ID')!,
+      client_secret: config('META_APP_SECRET')!,
       fb_exchange_token: short.access_token,
     },
   });
@@ -145,7 +146,7 @@ export const metaWebhookRouter = Router();
 
 // Meta calls this once when you save the webhook URL, to check it's yours.
 metaWebhookRouter.get('/webhook', (req, res) => {
-  if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === process.env.META_VERIFY_TOKEN && metaConfigured()) {
+  if (req.query['hub.mode'] === 'subscribe' && req.query['hub.verify_token'] === config('META_VERIFY_TOKEN') && metaConfigured()) {
     return res.send(String(req.query['hub.challenge'] ?? ''));
   }
   res.sendStatus(403);
@@ -153,7 +154,7 @@ metaWebhookRouter.get('/webhook', (req, res) => {
 
 function validSignature(req: Request & { body: Buffer }) {
   const header = req.get('X-Hub-Signature-256') || '';
-  const expected = 'sha256=' + crypto.createHmac('sha256', process.env.META_APP_SECRET || '').update(req.body).digest('hex');
+  const expected = 'sha256=' + crypto.createHmac('sha256', config('META_APP_SECRET') || '').update(req.body).digest('hex');
   return header.length === expected.length && crypto.timingSafeEqual(Buffer.from(header), Buffer.from(expected));
 }
 

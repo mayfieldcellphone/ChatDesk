@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import { all, get, run } from './db';
+import { config } from './config';
 
 // Web push notifications for the installed app and desktop browsers. The keys are generated once
 // and kept in the database, so there's nothing to configure (VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY
@@ -17,7 +18,7 @@ function vapidKeys() {
 }
 
 const keys = vapidKeys();
-webpush.setVapidDetails(`mailto:${process.env.VAPID_CONTACT || process.env.SMTP_FROM?.match(/<?([^<>\s]+@[^<>\s]+)>?/)?.[1] || 'admin@chatdesk.invalid'}`, keys.publicKey, keys.privateKey);
+webpush.setVapidDetails(`mailto:${process.env.VAPID_CONTACT || config('SMTP_FROM')?.match(/<?([^<>\s]+@[^<>\s]+)>?/)?.[1] || 'admin@chatdesk.invalid'}`, keys.publicKey, keys.privateKey);
 
 export const pushPublicKey = () => keys.publicKey;
 

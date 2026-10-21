@@ -3,6 +3,7 @@ import { all, get, newId, now, run, type Business, type Connection, type Review 
 import { publish } from './events';
 import { emailReviewAlert } from './notify';
 import { pushToBusiness } from './push';
+import { config } from './config';
 
 // Google Business Profile: connect locations, sync reviews, reply to them.
 // Setup (Google Cloud project + Business Profile API access): docs/INTEGRATIONS.md.
@@ -12,13 +13,13 @@ const SYNC_EVERY_MS = 15 * 60 * 1000;
 // Overridable so tests can point at a fake Google.
 const api = (host: string) => process.env.GOOGLE_API_BASE ? `${process.env.GOOGLE_API_BASE.replace(/\/$/, '')}/${host}` : `https://${host}`;
 
-export const googleConfigured = () => Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+export const googleConfigured = () => Boolean(config('GOOGLE_CLIENT_ID') && config('GOOGLE_CLIENT_SECRET'));
 
 export class GoogleError extends Error {}
 
 export function googleAuthUrl(redirectUri: string, state: string) {
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  url.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID!);
+  url.searchParams.set('client_id', config('GOOGLE_CLIENT_ID')!);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('scope', SCOPE);
@@ -32,7 +33,7 @@ async function tokenRequest(params: Record<string, string>) {
   const res = await fetch(api('oauth2.googleapis.com/token'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: process.env.GOOGLE_CLIENT_ID!, client_secret: process.env.GOOGLE_CLIENT_SECRET!, ...params }),
+    body: new URLSearchParams({ client_id: config('GOOGLE_CLIENT_ID')!, client_secret: config('GOOGLE_CLIENT_SECRET')!, ...params }),
   });
   const data = (await res.json().catch(() => ({}))) as { access_token?: string; refresh_token?: string; expires_in?: number; error_description?: string };
   if (!res.ok || !data.access_token) throw new GoogleError(data.error_description || `Google sign-in failed (${res.status})`);

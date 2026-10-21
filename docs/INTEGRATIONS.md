@@ -19,6 +19,14 @@ domain, update the redirect and webhook URLs below to match.
 
 ---
 
+## Where to put the keys
+
+Either in **Railway → chatdesk → Variables**, or, without opening Railway, in ChatDesk itself:
+**Integrations → 🔑 Server keys** (visible only to the ChatDesk owner: the first account created, or
+the addresses in `ADMIN_EMAILS`). Keys saved there are encrypted; a key set in Railway takes priority.
+
+---
+
 ## Google Business Profile
 
 ### 1. Create a Google Cloud project

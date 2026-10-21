@@ -6,6 +6,7 @@ import { connectGoogleLocations, googleAuthUrl, googleConfigured, replyToReview,
 import { connectMetaAccounts, disconnectMeta, metaAuthUrl, metaConfigured } from './meta';
 import { rateLimit } from './rateLimit';
 import { publicUrl, smsConfigured } from './twilio';
+import { configStatus, isAdmin, MANAGED_KEYS, saveConfig } from './config';
 
 export const integrationsRouter = Router();
 
@@ -60,6 +61,23 @@ integrationsRouter.get('/meta/callback', async (req, res) => {
 });
 
 integrationsRouter.use(requireAuth);
+
+// ---------- Server keys (owner only) ----------
+
+integrationsRouter.get('/keys', (req, res) => {
+  if (!isAdmin(req.session!.userId)) return res.status(403).json({ error: 'Only the ChatDesk owner can see server keys' });
+  res.json({ keys: configStatus() });
+});
+
+integrationsRouter.put('/keys/:name', (req, res) => {
+  if (!isAdmin(req.session!.userId)) return res.status(403).json({ error: 'Only the ChatDesk owner can change server keys' });
+  const key = MANAGED_KEYS.find((k) => k.name === req.params.name);
+  if (!key) return res.status(404).json({ error: 'Unknown key' });
+  if (process.env[key.name]) return res.status(409).json({ error: 'This key is set on the server (Railway) and can only be changed there' });
+  const value = req.body.value === null ? null : String(req.body.value ?? '').trim().slice(0, 2000);
+  saveConfig(key.name, value || null);
+  res.json({ keys: configStatus() });
+});
 
 integrationsRouter.get('/', (req, res) => {
   const { businessId } = req.session!;

@@ -1,10 +1,11 @@
 import nodemailer, { type Transporter } from 'nodemailer';
 import { all, get, now, run, type Business, type Conversation, type Message, type Review } from './db';
 import { subscriberCount } from './events';
+import { config, onConfigChange } from './config';
 
 const ALERT_REPEAT_MS = 15 * 60 * 1000;
 
-export const emailConfigured = () => Boolean(process.env.SMTP_HOST && process.env.SMTP_FROM);
+export const emailConfigured = () => Boolean(config('SMTP_HOST') && config('SMTP_FROM'));
 
 const alertRecipients = (businessId: string) =>
   all<{ email: string }>(
@@ -13,15 +14,19 @@ const alertRecipients = (businessId: string) =>
   );
 
 let transport: Transporter | null | undefined;
+// Email settings can be changed on the Integrations page; reconnect with the new ones.
+onConfigChange(() => {
+  transport = undefined;
+});
 function getTransport() {
   if (transport === undefined) {
-    const port = Number(process.env.SMTP_PORT) || 587;
+    const port = Number(config('SMTP_PORT')) || 587;
     transport = emailConfigured()
       ? nodemailer.createTransport({
-          host: process.env.SMTP_HOST,
+          host: config('SMTP_HOST'),
           port,
           secure: port === 465,
-          auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined,
+          auth: config('SMTP_USER') ? { user: config('SMTP_USER'), pass: config('SMTP_PASS') } : undefined,
         })
       : null;
   }
@@ -56,7 +61,7 @@ export async function emailTeam(business: Business, conversation: Conversation, 
   const body = message.kind === 'call' ? '' : `\n\n${message.body}`;
 
   await mailer.sendMail({
-    from: process.env.SMTP_FROM,
+    from: config('SMTP_FROM'),
     to: recipients.map((r) => r.email),
     subject,
     text: `${intro}${body}${link}\n\nYou're getting this because nobody had the inbox open. Turn these emails off in Settings.`,
@@ -80,7 +85,7 @@ export async function emailReviewAlert(business: Business, reviews: Review[]) {
   const link = process.env.PUBLIC_URL ? `\n\nReply in ChatDesk: ${process.env.PUBLIC_URL.replace(/\/$/, '')}/?view=reviews` : '';
 
   await mailer.sendMail({
-    from: process.env.SMTP_FROM,
+    from: config('SMTP_FROM'),
     to: recipients.map((r) => r.email),
     subject,
     text: `${business.name} has new reviews on Google:\n\n${lines.join('\n\n')}${link}\n\nTurn these emails off in Settings.`,

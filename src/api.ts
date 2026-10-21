@@ -40,7 +40,7 @@ export interface BusinessSummary {
 
 export interface Me {
   businesses: BusinessSummary[];
-  user: { id: string; name: string; email: string; notifyEmail: boolean; phone: string | null };
+  user: { id: string; name: string; email: string; notifyEmail: boolean; phone: string | null; isAdmin: boolean };
   business: Business;
 }
 

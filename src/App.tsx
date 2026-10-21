@@ -165,7 +165,7 @@ export default function App() {
         ) : view === 'reviews' ? (
           <Reviews key={me.business.id} business={me.business} onSaved={(business) => setMe({ ...me, business })} onOpenIntegrations={() => setView('integrations')} />
         ) : view === 'integrations' ? (
-          <Integrations key={me.business.id} notice={route.notice} onOpenSettings={() => setView('settings')} />
+          <Integrations key={me.business.id} notice={route.notice} isAdmin={me.user.isAdmin} onOpenSettings={() => setView('settings')} />
         ) : (
           <Settings
             key={me.business.id}

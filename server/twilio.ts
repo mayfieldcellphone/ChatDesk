@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
+import { config } from './config';
 
-const sid = () => process.env.TWILIO_ACCOUNT_SID || '';
-const authToken = () => process.env.TWILIO_AUTH_TOKEN || '';
+const sid = () => config('TWILIO_ACCOUNT_SID') || '';
+const authToken = () => config('TWILIO_AUTH_TOKEN') || '';
 // Overridable so tests can point at a fake Twilio.
 const apiBase = () => (process.env.TWILIO_API_BASE || 'https://api.twilio.com').replace(/\/$/, '');
 const accountUrl = (path: string) => `${apiBase()}/2010-04-01/Accounts/${sid()}${path}`;

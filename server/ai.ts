@@ -1,14 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Business, Review, SavedReply } from './db';
 import { isOpen, localTime } from './hours';
+import { config } from './config';
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-opus-5-5';
+const MODEL = config('ANTHROPIC_MODEL') || 'claude-opus-5-5';
 // Server-side refusal fallback is only accepted on these models.
 const FALLBACK_MODELS = new Set(['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5']);
 
-export const aiConfigured = () => Boolean(process.env.ANTHROPIC_API_KEY);
+export const aiConfigured = () => Boolean(config('ANTHROPIC_API_KEY'));
 
 let client: Anthropic | undefined;
+let clientKey: string | undefined;
 
 export interface TranscriptMessage {
   direction: 'in' | 'out';
@@ -55,7 +57,12 @@ ${knowledge || 'The owner has not added any business information yet, so avoid q
 
 /** One Claude call that returns a plain-text draft, with errors turned into messages staff can act on. */
 async function draft(system: string, prompt: string): Promise<string> {
-  client ??= new Anthropic();
+  // The key can be changed on the Integrations page, so rebuild the client when it does.
+  const apiKey = config('ANTHROPIC_API_KEY');
+  if (!client || clientKey !== apiKey) {
+    client = new Anthropic({ apiKey });
+    clientKey = apiKey;
+  }
   try {
     const response = await client.beta.messages.create({
       model: MODEL,
