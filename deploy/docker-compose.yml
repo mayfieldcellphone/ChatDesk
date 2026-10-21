@@ -1,0 +1,34 @@
+# ChatDesk on your own server (e.g. a Hostinger VPS). Set up and started by deploy/install.sh.
+# Caddy in front gets and renews the HTTPS certificate for your domain automatically.
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATABASE_FILE: /data/chatdesk.db
+    volumes:
+      - chatdesk-data:/data
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+
+volumes:
+  chatdesk-data:
+  caddy-data:
+  caddy-config:

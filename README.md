@@ -29,6 +29,10 @@ npm run dev              # http://localhost:3000
 2. Go to **Settings** and click **Preview on a test page** to try the widget as a customer.
 3. To add it to your real website, paste the snippet from Settings before `</body>`.
 
+## Hosting
+
+On your own server (e.g. a Hostinger VPS) with automatic HTTPS: [docs/HOSTINGER_VPS.md](docs/HOSTINGER_VPS.md). Any Docker host works too; mount a volume at `/data`.
+
 ## Optional features
 
 | Feature | What to set |
