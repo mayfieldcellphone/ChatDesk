@@ -1,5 +1,5 @@
 import nodemailer, { type Transporter } from 'nodemailer';
-import { all, get, now, run, type Business, type Conversation, type Message, type Review } from './db';
+import { all, get, now, run, type Business, type Contact, type Conversation, type Message, type Review } from './db';
 import { subscriberCount } from './events';
 import { config, onConfigChange } from './config';
 
@@ -51,7 +51,7 @@ export async function emailTeam(business: Business, conversation: Conversation, 
   const contact = get<{ name: string; phone: string | null }>('SELECT name, phone FROM contacts WHERE id = ?', conversation.contact_id);
   const name = (contact?.name ?? 'A customer').replace(/[\r\n]+/g, ' ');
   const who = `${name}${contact?.phone ? ` (${contact.phone})` : ''}`;
-  const link = process.env.PUBLIC_URL ? `\n\nOpen ChatDesk: ${process.env.PUBLIC_URL.replace(/\/$/, '')}` : '';
+  const link = process.env.PUBLIC_URL ? `\n\nOpen ChatBird: ${process.env.PUBLIC_URL.replace(/\/$/, '')}` : '';
   const { subject, intro } =
     message.kind === 'voicemail'
       ? { subject: `New voicemail from ${name}`, intro: `${who} left a voicemail for ${business.name}. Transcript:` }
@@ -86,12 +86,38 @@ export async function emailReviewAlert(business: Business, reviews: Review[]) {
       ? `${low ? 'Needs attention: ' : ''}New ${reviews[0].rating}-star Google review from ${reviews[0].author_name.replace(/[\r\n]+/g, ' ')}`
       : `${reviews.length} new Google reviews${low ? ' (including a low rating)' : ''}`;
   const lines = reviews.map((r) => `${stars(r.rating)}  ${r.author_name}\n${r.comment || '(no comment, rating only)'}`);
-  const link = process.env.PUBLIC_URL ? `\n\nReply in ChatDesk: ${process.env.PUBLIC_URL.replace(/\/$/, '')}/?view=reviews` : '';
+  const link = process.env.PUBLIC_URL ? `\n\nReply in ChatBird: ${process.env.PUBLIC_URL.replace(/\/$/, '')}/?view=reviews` : '';
 
   await mailer.sendMail({
     from: config('SMTP_FROM'),
     to: recipients.map((r) => r.email),
     subject,
     text: `${business.name} has new reviews on Google:\n\n${lines.join('\n\n')}${link}\n\nTurn these emails off in Settings.`,
+  });
+}
+
+/** The address customers' answers go to: the business's reply address, or the owner's login email. */
+export function replyAddress(business: Business) {
+  if (business.reply_email) return business.reply_email;
+  const owner = get<{ email: string }>(
+    'SELECT u.email FROM users u JOIN memberships m ON m.user_id = u.id WHERE m.business_id = ? ORDER BY m.created_at LIMIT 1',
+    business.id,
+  );
+  return owner?.email ?? null;
+}
+
+/** Emails a reply from the inbox to a customer, sent in the business's name. */
+export async function emailCustomer(business: Business, contact: Contact, body: string) {
+  const mailer = getTransport();
+  if (!mailer || !contact.email) throw new Error('Email is not set up on the server');
+  const from = config('SMTP_FROM')!;
+  const address = from.match(/<([^>]+)>/)?.[1] ?? from.trim();
+  const replyTo = replyAddress(business);
+  await mailer.sendMail({
+    from: { name: business.name.replace(/[\r\n"]+/g, ' '), address },
+    to: contact.email,
+    ...(replyTo ? { replyTo: { name: business.name.replace(/[\r\n"]+/g, ' '), address: replyTo } } : {}),
+    subject: `Message from ${business.name}`.replace(/[\r\n]+/g, ' '),
+    text: `${body}\n\n— ${business.name}${replyTo ? '\n\nReply to this email to get back to us.' : ''}`,
   });
 }

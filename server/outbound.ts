@@ -2,10 +2,11 @@ import { get, insertMessage, type Business, type Channel, type Connection, type 
 import { isVisitorOnline, publish } from './events';
 import { metaConfigured, sendMetaMessage } from './meta';
 import { sendSms, smsConfigured } from './twilio';
+import { emailConfigured, emailCustomer } from './notify';
 
 export class DeliveryError extends Error {}
 
-const CHANNEL_NAMES: Record<Channel, string> = { webchat: 'web chat', sms: 'text', facebook: 'Messenger', instagram: 'Instagram' };
+const CHANNEL_NAMES: Record<Channel, string> = { webchat: 'web chat', sms: 'text', facebook: 'Messenger', instagram: 'Instagram', email: 'email' };
 
 /** The ways staff can reach this customer right now, best first. */
 export function replyChannels(business: Business, conversation: Conversation, contact: Contact): Channel[] {
@@ -17,6 +18,7 @@ export function replyChannels(business: Business, conversation: Conversation, co
   if (connection?.provider === 'instagram' && contact.instagram_id && metaConfigured()) channels.push('instagram');
   if (conversation.visitor_token) channels.push('webchat');
   if (smsConfigured() && business.sms_number && contact.phone) channels.push('sms');
+  if (emailConfigured() && contact.email) channels.push('email');
   return channels;
 }
 
@@ -44,7 +46,9 @@ export async function sendToCustomer(
     throw new DeliveryError(
       channel === 'sms' && !(smsConfigured() && business.sms_number)
         ? 'Texting is not set up. Add your Twilio number in Settings.'
-        : `This customer can’t be reached by ${CHANNEL_NAMES[channel]}.`,
+        : channel === 'email' && !emailConfigured()
+          ? 'Email is not set up. Add your email (SMTP) settings under Integrations → Server keys.'
+          : `This customer can’t be reached by ${CHANNEL_NAMES[channel]}.`,
     );
   }
 
@@ -52,6 +56,8 @@ export async function sendToCustomer(
   try {
     if (channel === 'sms') {
       await sendSms(business.sms_number!, contact.phone!, body);
+    } else if (channel === 'email') {
+      await emailCustomer(business, contact, body);
     } else if (channel === 'facebook' || channel === 'instagram') {
       const connection = get<Connection>('SELECT * FROM connections WHERE id = ?', conversation.connection_id!)!;
       externalId = await sendMetaMessage(connection, (channel === 'facebook' ? contact.facebook_id : contact.instagram_id)!, body);

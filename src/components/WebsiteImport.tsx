@@ -132,7 +132,7 @@ export default function WebsiteImport({ business, autoStart, onApplied }: Props)
       <div>
         <h2 className="font-semibold">Set up from your website</h2>
         <p className="mt-1 text-sm text-slate-500">
-          ChatDesk reads your website and fills in your details, hours, messages and answers, so everything matches what customers see there. You check it before
+          ChatBird reads your website and fills in your details, hours, messages and answers, so everything matches what customers see there. You check it before
           anything changes.
         </p>
       </div>
@@ -147,7 +147,7 @@ export default function WebsiteImport({ business, autoStart, onApplied }: Props)
           {loading ? 'Reading your website…' : result || done ? 'Read again' : 'Fill in for me'}
         </button>
       </form>
-      {loading && <p className="text-sm text-slate-500">This takes up to a minute: ChatDesk reads your home, contact, services and prices pages.</p>}
+      {loading && <p className="text-sm text-slate-500">This takes up to a minute: ChatBird reads your home, contact, services and prices pages.</p>}
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       {done && <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">Done! Your settings below are updated. Change anything you like.</p>}
 

@@ -1,6 +1,6 @@
 # Setting up texting and calls (Twilio)
 
-One Twilio number gives ChatDesk:
+One Twilio number gives ChatBird:
 
 - **Texting**: reply to customers by SMS, and their texts land in the inbox.
 - **Calls & voicemail**: calls ring your shop first, then go to voicemail. Voicemails appear in the inbox
@@ -9,7 +9,7 @@ One Twilio number gives ChatDesk:
 
 It's optional: web chat works without it.
 
-**Before you start:** ChatDesk must be running on the internet at an `https://` address (for example
+**Before you start:** ChatBird must be running on the internet at an `https://` address (for example
 `https://chat.yourshop.com.au`). Twilio has to reach your server to deliver incoming texts, and it
 can't reach `localhost`. If you only want to try it from your computer first, see
 [Testing from your computer](#testing-from-your-computer).
@@ -40,10 +40,10 @@ On the Twilio Console home page, under **Account Info**, copy the **Account SID*
 the **Auth Token**. Treat the Auth Token like a password: never paste it into the website code or share
 it.
 
-## 4. Add them to ChatDesk's server
+## 4. Add them to ChatBird's server
 
-Set these environment variables where ChatDesk runs (your hosting provider's "Environment variables"
-or "Secrets" page, or the `.env` file on your own server), then restart ChatDesk:
+Set these environment variables where ChatBird runs (your hosting provider's "Environment variables"
+or "Secrets" page, or the `.env` file on your own server), then restart ChatBird:
 
 ```
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -51,10 +51,10 @@ TWILIO_AUTH_TOKEN=your-auth-token
 PUBLIC_URL=https://chat.yourshop.com.au
 ```
 
-`PUBLIC_URL` must be exactly the address people use to open ChatDesk: `https://`, no trailing slash.
-ChatDesk uses it to check that incoming texts really come from Twilio.
+`PUBLIC_URL` must be exactly the address people use to open ChatBird: `https://`, no trailing slash.
+ChatBird uses it to check that incoming texts really come from Twilio.
 
-## 5. Point the number at ChatDesk
+## 5. Point the number at ChatBird
 
 In Twilio, open **Phone Numbers → Manage → Active numbers** and click your number. Replace
 `https://chat.yourshop.com.au` below with your `PUBLIC_URL`, and use **HTTP POST** for every one.
@@ -65,28 +65,28 @@ In Twilio, open **Phone Numbers → Manage → Active numbers** and click your n
 | Voice Configuration | **Call status changes** | `https://chat.yourshop.com.au/api/voice/status` |
 | Messaging Configuration | **A message comes in** (Webhook) | `https://chat.yourshop.com.au/api/sms/inbound` |
 
-Click **Save configuration**. ChatDesk's Settings page shows these exact URLs for your server too.
+Click **Save configuration**. ChatBird's Settings page shows these exact URLs for your server too.
 
-## 6. Turn it on in ChatDesk
+## 6. Turn it on in ChatBird
 
-In ChatDesk, go to **Settings → Widget & business**, enter the number in **Twilio SMS number** (for
+In ChatBird, go to **Settings → Widget & business**, enter the number in **Twilio SMS number** (for
 example `+61491570006`) and click **Save**. The note under the field changes once the server has
 picked up your Twilio settings.
 
 ## 7. Set up calls
 
-In ChatDesk **Settings → Phone calls & voicemail**:
+In ChatBird **Settings → Phone calls & voicemail**:
 
-- **Ring this phone first**: your shop or mobile number. During office hours ChatDesk rings it for the
+- **Ring this phone first**: your shop or mobile number. During office hours ChatBird rings it for the
   number of seconds you choose, then sends the caller to voicemail. Leave it empty to send every call
   straight to voicemail.
 - **Voicemail greeting**: what callers hear before the beep.
 - **Missed-call text**: the automatic text a caller gets when you miss them (at most once an hour each).
-- **Your mobile, for Call back**: the phone ChatDesk rings when you click 📞 Call back.
+- **Your mobile, for Call back**: the phone ChatBird rings when you click 📞 Call back.
 
 ## 8. Test it
 
-1. From your own mobile, text the Twilio number. It should appear in the ChatDesk inbox within a few
+1. From your own mobile, text the Twilio number. It should appear in the ChatBird inbox within a few
    seconds, marked **Text**.
 2. Reply with **Reply by → Text**. The text should arrive on your phone.
 3. Call the Twilio number from a phone that isn't the "ring first" number, let it go to voicemail and
@@ -97,15 +97,15 @@ In ChatDesk **Settings → Phone calls & voicemail**:
 
 ## Keeping the number customers already know
 
-Customers probably call your existing shop number. Two ways to bring those calls into ChatDesk:
+Customers probably call your existing shop number. Two ways to bring those calls into ChatBird:
 
 - **Forward missed calls (easiest, keep your number).** Ask your phone carrier to turn on *conditional
   call forwarding* ("forward when busy / no answer / unreachable") to your Twilio number. Your phone
-  still rings first; if you don't answer, the call reaches ChatDesk's voicemail. In this setup, leave
+  still rings first; if you don't answer, the call reaches ChatBird's voicemail. In this setup, leave
   **Ring this phone first** empty, or calls will bounce back and forth. Texts to your old number won't
   come through, so put the Twilio number on your website and Google profile for texting.
 - **Port your number to Twilio.** Move the number itself into Twilio (Console → Phone Numbers → Port &
-  Host). Then calls and texts to the number everyone knows go through ChatDesk, and **Ring this phone
+  Host). Then calls and texts to the number everyone knows go through ChatBird, and **Ring this phone
   first** can point at your mobile. If the number currently belongs to Birdeye, ask them how to release
   it before you cancel.
 
@@ -115,9 +115,9 @@ Customers probably call your existing shop number. Two ways to bring those calls
 | --- | --- |
 | "Text" reply button is greyed out | The server is missing `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` (restart after adding them), the number isn't saved in Settings, or the customer has no mobile number. |
 | "Text not sent: …" error | The message after the colon comes from Twilio. On a trial account the customer's number must be verified in Twilio first. Also check the account has credit. |
-| Texts to your number don't appear in the inbox | In Twilio, open **Monitor → Logs → Errors** or the number's message logs. A **403** means `PUBLIC_URL` doesn't exactly match the webhook URL's address. A **503** means ChatDesk is missing the Twilio settings or `PUBLIC_URL`. No request at all means the webhook URL is wrong. |
-| Texts appear under the wrong business, or not at all | The number in Settings must match the Twilio number exactly. ChatDesk stores it in `+61…` form. |
-| Callers hear "this number isn't set up yet" | The Twilio number isn't saved in ChatDesk Settings, or doesn't match exactly. |
+| Texts to your number don't appear in the inbox | In Twilio, open **Monitor → Logs → Errors** or the number's message logs. A **403** means `PUBLIC_URL` doesn't exactly match the webhook URL's address. A **503** means ChatBird is missing the Twilio settings or `PUBLIC_URL`. No request at all means the webhook URL is wrong. |
+| Texts appear under the wrong business, or not at all | The number in Settings must match the Twilio number exactly. ChatBird stores it in `+61…` form. |
+| Callers hear "this number isn't set up yet" | The Twilio number isn't saved in ChatBird Settings, or doesn't match exactly. |
 | Calls don't show in the inbox | Check the **A call comes in** webhook URL and method (POST). Twilio's call logs (**Monitor → Logs → Calls**) show the error. |
 | Missed calls stay as "Incoming call…" | The **Call status changes** webhook isn't set. |
 | Voicemail plays but there's no transcript | Twilio's transcription is English-only and skips recordings it can't make out. Press play to listen. |
@@ -129,7 +129,7 @@ Twilio needs a public `https` address, so run a tunnel such as
 [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)
 (`cloudflared tunnel --url http://localhost:3000`) or [ngrok](https://ngrok.com/) (`ngrok http 3000`).
 It prints an address like `https://random-words.trycloudflare.com`. Use that as `PUBLIC_URL`, restart
-ChatDesk, and use it in the Twilio webhook URL. The address changes each time you restart the tunnel,
+ChatBird, and use it in the Twilio webhook URL. The address changes each time you restart the tunnel,
 so update both when it does.
 
 ## Costs

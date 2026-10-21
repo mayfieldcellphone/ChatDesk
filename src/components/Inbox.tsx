@@ -92,7 +92,7 @@ export default function Inbox({ business, businesses, initialConversationId, onS
 
   const totalUnread = conversations.reduce((n, c) => n + c.unreadCount, 0);
   useEffect(() => {
-    document.title = totalUnread ? `(${totalUnread}) ChatDesk Inbox` : 'ChatDesk Inbox';
+    document.title = totalUnread ? `(${totalUnread}) ChatBird Inbox` : 'ChatBird Inbox';
   }, [totalUnread]);
 
   return (
@@ -109,7 +109,7 @@ export default function Inbox({ business, businesses, initialConversationId, onS
               onClick={push.state === 'off' ? push.enable : onOpenSettings}
               className="w-full rounded-md bg-amber-50 px-3 py-2 text-left text-xs text-amber-800 hover:bg-amber-100"
             >
-              🔔 {push.state === 'off' ? 'Turn on notifications on this device so you don’t miss messages' : 'Add ChatDesk to your Home Screen to get notifications (see Settings)'}
+              🔔 {push.state === 'off' ? 'Turn on notifications on this device so you don’t miss messages' : 'Add ChatBird to your Home Screen to get notifications (see Settings)'}
             </button>
           )}
           {multi && (

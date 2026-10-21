@@ -92,7 +92,7 @@ export default function App() {
 
   const sidebar = (
     <nav className="flex h-full w-64 shrink-0 flex-col bg-slate-900 text-slate-300">
-      <div className="px-5 pb-3 pt-5 text-lg font-bold text-white">ChatDesk</div>
+      <div className="px-5 pb-3 pt-5 text-lg font-bold text-white">ChatBird</div>
       <div className="mx-2 mb-3 space-y-0.5 rounded-lg bg-slate-800/60 p-1.5">
         {me.businesses.map((b) => (
           <button

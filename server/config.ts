@@ -2,7 +2,7 @@ import { decrypt, encrypt } from './crypto';
 import { all, get, run } from './db';
 
 // Integration keys. Each is read from the environment (e.g. Railway variables) first, otherwise from
-// the encrypted copy the owner saved on ChatDesk's Integrations page, so keys can be managed without
+// the encrypted copy the owner saved on ChatBird's Integrations page, so keys can be managed without
 // the hosting dashboard.
 
 export const MANAGED_KEYS = [
@@ -67,7 +67,7 @@ export function configStatus() {
   });
 }
 
-/** The ChatDesk owner: anyone listed in ADMIN_EMAILS, or else the first account created. */
+/** The ChatBird owner: anyone listed in ADMIN_EMAILS, or else the first account created. */
 export function isAdmin(userId: string) {
   const user = get<{ email: string }>('SELECT email FROM users WHERE id = ?', userId);
   if (!user) return false;

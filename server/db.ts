@@ -168,6 +168,8 @@ addColumn('businesses', 'repairbill_url', 'TEXT');
 addColumn('businesses', 'repairbill_key', 'TEXT');
 addColumn('businesses', 'repairbill_last_sent_at', 'TEXT');
 addColumn('businesses', 'repairbill_last_error', 'TEXT');
+// Where customers' answers to emails from the inbox go (default: the owner's login email).
+addColumn('businesses', 'reply_email', 'TEXT');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS calls (
@@ -246,11 +248,11 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
-  -- Server-wide values ChatDesk generates for itself (e.g. push notification keys).
+  -- Server-wide values ChatBird generates for itself (e.g. push notification keys).
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
 
-export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram';
+export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
 export interface Business {
   id: string;
@@ -284,6 +286,7 @@ export interface Business {
   repairbill_key: string | null;
   repairbill_last_sent_at: string | null;
   repairbill_last_error: string | null;
+  reply_email: string | null;
   created_at: string;
 }
 

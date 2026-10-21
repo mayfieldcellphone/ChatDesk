@@ -114,7 +114,7 @@ export async function connectMetaAccounts(businessId: string, code: string, redi
 function saveConnection(businessId: string, provider: 'facebook' | 'instagram', externalId: string, name: string, token: string, meta: object) {
   const existing = get<Connection>('SELECT * FROM connections WHERE provider = ? AND external_id = ?', provider, externalId);
   if (existing && existing.business_id !== businessId) {
-    throw new MetaError(`${name} is already connected to another ChatDesk business. Disconnect it there first.`);
+    throw new MetaError(`${name} is already connected to another ChatBird business. Disconnect it there first.`);
   }
   if (existing) {
     run('UPDATE connections SET name = ?, access_token = ?, meta = ?, last_error = NULL WHERE id = ?', name, encrypt(token), JSON.stringify(meta), existing.id);
@@ -230,7 +230,7 @@ async function handleMessagingEvent(connection: Connection, event: MessagingEven
   if (!message?.mid || get('SELECT id FROM messages WHERE external_id = ?', message.mid)) return;
 
   const provider = connection.provider as 'facebook' | 'instagram';
-  // Echoes are messages the business sent: from ChatDesk (already stored, skipped above) or from
+  // Echoes are messages the business sent: from ChatBird (already stored, skipped above) or from
   // Facebook / Instagram's own apps, which we record so the thread stays complete.
   const customerId = message.is_echo ? event.recipient.id : event.sender.id;
   const business = get<Business>('SELECT * FROM businesses WHERE id = ?', connection.business_id)!;

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Installs or updates ChatDesk on an Ubuntu/Debian server (e.g. a Hostinger VPS).
+# Installs or updates ChatBird on an Ubuntu/Debian server (e.g. a Hostinger VPS).
 #   First time:  bash deploy/install.sh [chatdesk.example.com.au]
 #   Update:      bash deploy/install.sh
 # Your settings live in deploy/.env and your data in a Docker volume; both survive updates.
-# If nginx already serves other websites on this server, ChatDesk is added to it as one more
+# If nginx already serves other websites on this server, ChatBird is added to it as one more
 # site and those websites are left alone. Otherwise Caddy handles HTTPS.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -38,18 +38,18 @@ fi
 
 server_ip=$(curl -fsS4 https://api.ipify.org || true)
 free="${server_ip//./-}.sslip.io"
-# Next to an existing website, ChatDesk needs its own name; the bare free address belongs to that site.
+# Next to an existing website, ChatBird needs its own name; the bare free address belongs to that site.
 [ "$mode" = nginx ] && free="chatdesk.$free"
 
 if [ -f .env ] && [ "$mode" = nginx ] && grep -qx "DOMAIN=${server_ip//./-}.sslip.io" .env; then
-  echo "==> Your other website uses ${server_ip//./-}.sslip.io, so ChatDesk moves to $free"
+  echo "==> Your other website uses ${server_ip//./-}.sslip.io, so ChatBird moves to $free"
   sed -i "s#^DOMAIN=.*#DOMAIN=$free#; s#^PUBLIC_URL=.*#PUBLIC_URL=https://$free#" .env
 fi
 
 if [ ! -f .env ]; then
   domain="${1:-}"
   if [ -z "$domain" ]; then
-    echo "Which web address should ChatDesk use?"
+    echo "Which web address should ChatBird use?"
     echo "  Press Enter to use a free address that works straight away: $free"
     read -rp "  Or type your own (its DNS must already point to $server_ip): " domain
   fi
@@ -67,7 +67,7 @@ META_APP_ID=1102120456072237
 META_LOGIN_CONFIG_ID=1424769452456407
 META_VERIFY_TOKEN=$(openssl rand -hex 16)
 # Optional. Secrets (app secrets, auth tokens, API keys) can instead be entered in
-# ChatDesk -> Integrations -> Server keys, which keeps them out of this file.
+# ChatBird -> Integrations -> Server keys, which keeps them out of this file.
 ENV
 fi
 set -a; . ./.env; set +a
@@ -93,9 +93,9 @@ docker image prune -f >/dev/null
 if [ "$mode" = nginx ]; then
   site=/etc/nginx/sites-available/chatdesk
   if [ ! -f "$site" ] || ! grep -q "server_name $DOMAIN;" "$site"; then
-    echo "==> Adding ChatDesk to nginx as $DOMAIN (your other sites are not changed)"
+    echo "==> Adding ChatBird to nginx as $DOMAIN (your other sites are not changed)"
     cat > "$site" <<NGINX
-# ChatDesk (added by /opt/chatdesk/deploy/install.sh)
+# ChatBird (added by /opt/chatdesk/deploy/install.sh)
 server {
     listen 80;
     listen [::]:80;
@@ -116,7 +116,7 @@ NGINX
     ln -sf "$site" /etc/nginx/sites-enabled/chatdesk
     if ! nginx -t 2>/dev/null; then
       rm -f /etc/nginx/sites-enabled/chatdesk; nginx -t || true
-      echo "!! nginx didn't accept the ChatDesk site, so it was removed again. Your other sites are unchanged."; exit 1
+      echo "!! nginx didn't accept the ChatBird site, so it was removed again. Your other sites are unchanged."; exit 1
     fi
     systemctl reload nginx
   fi
@@ -127,11 +127,11 @@ NGINX
   fi
 fi
 
-echo "==> Waiting for ChatDesk to answer"
+echo "==> Waiting for ChatBird to answer"
 for _ in $(seq 1 60); do
   if curl -fsS -o /dev/null "https://$DOMAIN/api/health" 2>/dev/null; then
     echo
-    echo "ChatDesk is running:  https://$DOMAIN"
+    echo "ChatBird is running:  https://$DOMAIN"
     echo "Meta webhook URL:     https://$DOMAIN/api/meta/webhook"
     echo "Meta verify token:    $META_VERIFY_TOKEN"
     echo "Logs:                 cd $(pwd) && docker compose logs -f app"
@@ -139,4 +139,4 @@ for _ in $(seq 1 60); do
   fi
   sleep 3
 done
-echo "ChatDesk didn't answer at https://$DOMAIN. Recent logs:"; docker compose logs --tail 50 app; exit 1
+echo "ChatBird didn't answer at https://$DOMAIN. Recent logs:"; docker compose logs --tail 50 app; exit 1

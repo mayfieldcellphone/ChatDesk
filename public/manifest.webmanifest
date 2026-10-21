@@ -1,6 +1,6 @@
 {
-  "name": "ChatDesk",
-  "short_name": "ChatDesk",
+  "name": "ChatBird",
+  "short_name": "ChatBird",
   "description": "Messages, calls and reviews for your businesses in one inbox",
   "start_url": "/",
   "scope": "/",

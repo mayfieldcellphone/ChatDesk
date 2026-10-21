@@ -28,7 +28,7 @@ function checkCallback(req: Parameters<typeof readSession>[0], provider: 'google
   const state = verifyOAuthState(String(req.query.state ?? ''));
   const session = readSession(req);
   if (!state || state.provider !== provider) return { error: 'That sign-in link expired. Try connecting again.' };
-  if (!session || session.businessId !== state.businessId) return { error: 'Sign in to ChatDesk in this browser, then try connecting again.' };
+  if (!session || session.businessId !== state.businessId) return { error: 'Sign in to ChatBird in this browser, then try connecting again.' };
   return { state };
 }
 
@@ -65,12 +65,12 @@ integrationsRouter.use(requireAuth);
 // ---------- Server keys (owner only) ----------
 
 integrationsRouter.get('/keys', (req, res) => {
-  if (!isAdmin(req.session!.userId)) return res.status(403).json({ error: 'Only the ChatDesk owner can see server keys' });
+  if (!isAdmin(req.session!.userId)) return res.status(403).json({ error: 'Only the ChatBird owner can see server keys' });
   res.json({ keys: configStatus() });
 });
 
 integrationsRouter.put('/keys/:name', (req, res) => {
-  if (!isAdmin(req.session!.userId)) return res.status(403).json({ error: 'Only the ChatDesk owner can change server keys' });
+  if (!isAdmin(req.session!.userId)) return res.status(403).json({ error: 'Only the ChatBird owner can change server keys' });
   const key = MANAGED_KEYS.find((k) => k.name === req.params.name);
   if (!key) return res.status(404).json({ error: 'Unknown key' });
   if (process.env[key.name]) return res.status(409).json({ error: 'This key is set on the server (Railway) and can only be changed there' });

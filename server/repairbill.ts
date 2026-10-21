@@ -3,7 +3,7 @@ import { assertPublicHost } from './website';
 
 /**
  * Sends website enquiries on to a RepairBill dashboard (its "web integration" leads API), so a site
- * needs only the ChatDesk widget. The key is the RepairBill widget API key from its Settings.
+ * needs only the ChatBird widget. The key is the RepairBill widget API key from its Settings.
  */
 
 export type LeadType = 'contact' | 'quote' | 'callback';
@@ -53,7 +53,7 @@ async function post(business: Business, lead: Lead) {
       customerPhone: lead.phone || undefined,
       message: lead.message,
       type: lead.type,
-      metadata: { source: lead.pageUrl || 'Website chat', integratedVia: 'ChatDesk', ...(link ? { chatdeskLink: link } : {}) },
+      metadata: { source: lead.pageUrl || 'Website chat', integratedVia: 'ChatBird', ...(link ? { chatdeskLink: link } : {}) },
     }),
   });
   if (res.status === 401) throw new Error('RepairBill didn’t accept the API key. Copy it again from RepairBill → Settings.');

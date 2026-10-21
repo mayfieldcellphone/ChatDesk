@@ -1,4 +1,4 @@
-# ChatDesk
+# ChatBird
 
 Website chat widget + team inbox for local businesses, in the style of Birdeye Webchat.
 
@@ -7,14 +7,15 @@ Website chat widget + team inbox for local businesses, in the style of Birdeye W
 - **Reply by chat or text**: while the customer is on your site, reply in the widget. Once they've left, reply by SMS (via Twilio), and texts they send back land in the same thread.
 - **Calls & voicemail** (Twilio): calls ring your shop first, then go to voicemail. Voicemails show in the inbox with a play button and transcript, callers who hang up get an automatic text, and **Call back** rings your phone and connects you, showing the business number.
 - **Google reviews**: see and reply to Google Business Profile reviews (with AI drafts), get alerts for new ones, and send customers your review link with **⭐ Ask for review**.
-- **Facebook Messenger & Instagram**: DMs land in the same inbox and you reply from ChatDesk.
+- **Facebook Messenger & Instagram**: DMs land in the same inbox and you reply from ChatBird.
 - **Office hours & away message**: outside your hours, customers get an automatic reply and the widget shows you're away.
 - **Saved replies**: one-click answers to common questions, with `{name}` and `{business}` filled in. Type `/` in the reply box.
 - **AI-suggested replies**: Claude drafts a reply from the conversation, your business info and saved replies, for you to check before sending.
+- **Email replies**: when a customer has an email address (from a quote form, or one you add in the conversation), reply by email from the inbox. It's sent in your business's name and their answer goes to your reply address (Settings). Needs the SMTP settings.
 - **Chat button & menu**: put the button bottom-left or bottom-right with your own spacing (so it doesn't cover another chat button), and offer *Get a quote*, *Request a call back* and *Call us now* next to chat. Quote and call-back requests land in the inbox like chats.
 - **RepairBill**: forward each new website enquiry to a RepairBill dashboard (Integrations → RepairBill), so a site needs only one chat widget.
 - **Phone app & notifications**: installs from the browser (Add to Home Screen) with push notifications for messages, calls, voicemails and reviews. See [docs/PHONE_APP.md](docs/PHONE_APP.md). Plus a chime while the inbox is open and email when nobody has it open.
-- **Set up from your website**: enter your website address and ChatDesk fills in your name, hours, colour, greetings, AI notes and saved replies for you to review.
+- **Set up from your website**: enter your website address and ChatBird fills in your name, hours, colour, greetings, AI notes and saved replies for you to review.
 - **Several businesses, one login**: run several websites or shops from one login, each with its own widget, number, settings and connected accounts, plus an **All businesses** inbox.
 
 ## Run locally

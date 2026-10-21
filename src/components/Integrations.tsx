@@ -59,7 +59,7 @@ export default function Integrations({ notice, onOpenSettings, isAdmin, business
 
   const disconnect = async (c: Connection) => {
     const also = c.provider === 'google' ? '' : ' Its linked Facebook Page / Instagram account will be disconnected together.';
-    if (!confirm(`Disconnect ${c.name}? Existing conversations stay in ChatDesk.${also}`)) return;
+    if (!confirm(`Disconnect ${c.name}? Existing conversations stay in ChatBird.${also}`)) return;
     setBusy(c.id);
     await api(`/integrations/${c.id}`, { method: 'DELETE' }).catch((err) => setError(err.message));
     setBusy(null);
@@ -120,7 +120,7 @@ export default function Integrations({ notice, onOpenSettings, isAdmin, business
       <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 md:px-6 md:py-8">
         <div>
           <h1 className="text-xl font-semibold">Integrations</h1>
-          <p className="text-sm text-slate-500">Connect your accounts so messages and reviews come into ChatDesk.</p>
+          <p className="text-sm text-slate-500">Connect your accounts so messages and reviews come into ChatBird.</p>
           {isAdmin && (
             <a href="#server-keys" className="text-sm text-blue-600 hover:underline">
               Enter API keys (Server keys) ↓
@@ -132,7 +132,7 @@ export default function Integrations({ notice, onOpenSettings, isAdmin, business
         )}
         {error && <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
 
-        <Card icon="🔎" title="Google Business Profile" description="See your Google reviews, reply to them from ChatDesk, get alerts for new ones, and send customers your review link.">
+        <Card icon="🔎" title="Google Business Profile" description="See your Google reviews, reply to them from ChatBird, get alerts for new ones, and send customers your review link.">
           {rows(list('google'), true)}
           {connectButton('google', list('google').length ? 'Connect another Google account' : 'Connect Google', status.google.available)}
           {!status.google.available && (
@@ -145,7 +145,7 @@ export default function Integrations({ notice, onOpenSettings, isAdmin, business
           <p className="text-xs text-slate-500">Google ended chat messaging on Business Profiles in 2024, so Google brings reviews, not messages.</p>
         </Card>
 
-        <Card icon="💬" title="Facebook Messenger & Instagram" description="Messages to your Facebook Page and Instagram business account land in the inbox, and you reply from ChatDesk.">
+        <Card icon="💬" title="Facebook Messenger & Instagram" description="Messages to your Facebook Page and Instagram business account land in the inbox, and you reply from ChatBird.">
           {rows([...list('facebook'), ...list('instagram')])}
           {connectButton('meta', list('facebook').length ? 'Add or update Pages' : 'Connect Facebook & Instagram', status.meta.available)}
           {!status.meta.available && (
@@ -252,7 +252,7 @@ function RepairBillCard({ business, onSaved }: { business: Business; onSaved: (b
         </div>
       </form>
       <p className="text-xs text-slate-500">
-        Once this works, remove the RepairBill chat script from your website and keep only the ChatDesk one. Each new conversation is sent once (not every message); you reply in ChatDesk.
+        Once this works, remove the RepairBill chat script from your website and keep only the ChatBird one. Each new conversation is sent once (not every message); you reply in ChatBird.
       </p>
     </Card>
   );

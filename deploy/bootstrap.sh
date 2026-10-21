@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-paste setup for a fresh VPS: signs in to GitHub (the repo is private), downloads ChatDesk
+# One-paste setup for a fresh VPS: signs in to GitHub (the repo is private), downloads ChatBird
 # to /opt/chatdesk and runs the installer. The same block is in docs/HOSTINGER_VPS.md.
 set -e
 if ! command -v gh >/dev/null 2>&1; then

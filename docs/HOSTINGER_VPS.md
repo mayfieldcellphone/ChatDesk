@@ -1,6 +1,6 @@
-# Running ChatDesk on a Hostinger VPS
+# Running ChatBird on a Hostinger VPS
 
-This runs ChatDesk on your own server with HTTPS. You need about 10 minutes.
+This runs ChatBird on your own server with HTTPS. You need about 10 minutes.
 
 ## Quick setup (one paste)
 
@@ -25,7 +25,7 @@ bash /opt/chatdesk/deploy/install.sh
    your phone or computer, sign in to GitHub, type the code and approve.
 2. When asked for the web address, just press **Enter** to use a free one that works straight away
    (you can switch to your own domain later).
-3. Wait a few minutes. At the end it prints your ChatDesk address.
+3. Wait a few minutes. At the end it prints your ChatBird address.
 
 The manual steps below do the same thing.
 
@@ -44,10 +44,10 @@ If the domain is at Hostinger: hPanel → **Domains** → your domain → **DNS 
 hPanel → **VPS** → your server → **Browser terminal** (or `ssh root@YOUR_VPS_IP`).
 The VPS should run Ubuntu or Debian. Docker is installed for you if it isn't there.
 
-## 3. Download ChatDesk
+## 3. Download ChatBird
 
 The repository is private, so GitHub asks you to sign in. Create a token first: GitHub → Settings →
-Developer settings → **Fine-grained tokens** → Generate. Choose *Only select repositories* → ChatDesk,
+Developer settings → **Fine-grained tokens** → Generate. Choose *Only select repositories* → ChatDesk (the repository keeps its name),
 and under Repository permissions set **Contents: Read-only**. Copy the token.
 
 ```bash
@@ -63,7 +63,7 @@ Username: `mayfieldcellphone`. Password: paste the token. The token is saved on 
 bash /opt/chatdesk/deploy/install.sh chatdesk.yourdomain.com.au
 ```
 
-At the end it prints your ChatDesk address, the Meta webhook URL and a new **Meta verify token**. Open the
+At the end it prints your ChatBird address, the Meta webhook URL and a new **Meta verify token**. Open the
 address, create your account (the first account is the owner), then enter API keys in
 **Integrations → Server keys**.
 
@@ -80,7 +80,7 @@ This pulls the latest version and restarts. Your data and settings are kept.
 - **Settings** are in `/opt/chatdesk/deploy/.env`. After editing, run the install command again.
 - **Data** is in the Docker volume `deploy_chatdesk-data`. Turn on VPS backups/snapshots in hPanel.
 - **Logs:** `cd /opt/chatdesk/deploy && docker compose logs -f app`
-- If nginx already serves other websites on the VPS, ChatDesk is added to it as one more site (at `chatdesk.<your-ip>.sslip.io` by default) with its own certificate; the other sites are left alone. If some other program holds ports 80/443, the installer stops and names it.
+- If nginx already serves other websites on the VPS, ChatBird is added to it as one more site (at `chatdesk.<your-ip>.sslip.io` by default) with its own certificate; the other sites are left alone. If some other program holds ports 80/443, the installer stops and names it.
 - After moving, update every callback URL to the new address: Twilio number webhooks, Meta webhook and
   redirect URI (`/api/integrations/meta/callback`), Google OAuth redirect (`/api/integrations/google/callback`),
   and the chat widget snippet on your websites.

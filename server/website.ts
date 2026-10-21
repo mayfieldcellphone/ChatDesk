@@ -5,7 +5,7 @@ import { aiConfigured } from './ai';
 import { DAYS, validateHours, validTimezone, type Day, type WeeklyHours } from './hours';
 import { config } from './config';
 
-// Reads a business's website to pre-fill ChatDesk's settings. Structured data (schema.org JSON-LD,
+// Reads a business's website to pre-fill ChatBird's settings. Structured data (schema.org JSON-LD,
 // meta tags, tel: links) is read directly; when an Anthropic key is set, Claude turns the page text
 // into greetings, AI notes and saved replies. The owner reviews everything before it's applied.
 
@@ -55,7 +55,7 @@ export async function assertPublicHost(url: URL) {
     throw new WebsiteError(`Couldn't find ${url.hostname}. Check the address.`);
   });
   if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address))) {
-    throw new WebsiteError('That address points to a private network, so ChatDesk won’t read it.');
+    throw new WebsiteError('That address points to a private network, so ChatBird won’t read it.');
   }
 }
 
@@ -66,7 +66,7 @@ async function fetchPage(start: URL): Promise<{ url: URL; html: string }> {
     const res = await fetch(url, {
       redirect: 'manual',
       signal: AbortSignal.timeout(TIMEOUT_MS),
-      headers: { 'User-Agent': 'ChatDeskBot/1.0 (setting up chat for this business)', Accept: 'text/html' },
+      headers: { 'User-Agent': 'ChatBirdBot/1.0 (setting up chat for this business)', Accept: 'text/html' },
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       url = new URL(res.headers.get('location')!, url); // each hop is checked again

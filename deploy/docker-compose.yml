@@ -1,4 +1,4 @@
-# ChatDesk on your own server (e.g. a Hostinger VPS). Set up and started by deploy/install.sh.
+# ChatBird on your own server (e.g. a Hostinger VPS). Set up and started by deploy/install.sh.
 # Caddy in front gets and renews the HTTPS certificate for your domain automatically.
 services:
   app:

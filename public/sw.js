@@ -1,4 +1,4 @@
-// ChatDesk service worker: makes the inbox installable and shows push notifications.
+// ChatBird service worker: makes the inbox installable and shows push notifications.
 // It deliberately doesn't cache the app, so the inbox is always the latest version.
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -12,14 +12,14 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch (e) {
-    data = { title: 'ChatDesk', body: event.data ? event.data.text() : '' };
+    data = { title: 'ChatBird', body: event.data ? event.data.text() : '' };
   }
   event.waitUntil(
     (async () => {
       // If the inbox is open and in front, it already chimes and updates; don't double up.
       const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       if (windows.some((w) => w.visibilityState === 'visible' && w.focused)) return;
-      await self.registration.showNotification(data.title || 'ChatDesk', {
+      await self.registration.showNotification(data.title || 'ChatBird', {
         body: data.body || '',
         tag: data.tag,
         renotify: Boolean(data.tag),

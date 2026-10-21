@@ -36,6 +36,9 @@ export interface Business {
   repairbillKeyHint: string | null;
   repairbillLastSentAt: string | null;
   repairbillLastError: string | null;
+  replyEmail: string | null;
+  /** Where customers' answers to emails go: replyEmail, or the owner's login email. */
+  replyEmailEffective: string | null;
 }
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -67,9 +70,9 @@ export function fillReply(body: string, contactName: string, businessName: strin
   return body.replace(/\{name\}/gi, first).replace(/\{business\}/gi, businessName);
 }
 
-export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram';
+export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
-export const CHANNEL_LABELS: Record<Channel, string> = { webchat: 'Chat', sms: 'Text', facebook: 'Messenger', instagram: 'Instagram' };
+export const CHANNEL_LABELS: Record<Channel, string> = { webchat: 'Chat', sms: 'Text', facebook: 'Messenger', instagram: 'Instagram', email: 'Email' };
 
 export interface ConversationSummary {
   id: string;

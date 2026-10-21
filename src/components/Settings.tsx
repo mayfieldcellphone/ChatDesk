@@ -109,7 +109,7 @@ function InstallSection({ business }: { business: Business }) {
 }
 
 function WidgetSection({ business, onSaved }: Props) {
-  const [form, setForm] = useState({ name: business.name, greeting: business.greeting, color: business.color, smsNumber: business.smsNumber ?? '' });
+  const [form, setForm] = useState({ name: business.name, greeting: business.greeting, color: business.color, smsNumber: business.smsNumber ?? '', replyEmail: business.replyEmail ?? '' });
   const { save, status, busy } = useBusinessSave(onSaved);
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -141,6 +141,14 @@ function WidgetSection({ business, onSaved }: Props) {
               ? 'Lets you reply by text, and puts customers’ texts to this number in your inbox. In Twilio, set the number’s incoming-message webhook to '
               : 'Texting is off: the server has no Twilio credentials. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN, then point the number’s incoming-message webhook at '}
             <code>{location.origin}/api/sms/inbound</code>
+          </p>
+        </div>
+        <div>
+          <label className={label} htmlFor="replyEmail">Customer email replies go to</label>
+          <input id="replyEmail" type="email" className={input} placeholder={business.replyEmailEffective ?? 'you@yourbusiness.com.au'} value={form.replyEmail} onChange={(e) => setForm({ ...form, replyEmail: e.target.value })} />
+          <p className="mt-1 text-xs text-slate-500">
+            When you reply to a customer by email, their answer goes to this address. Leave empty to use your login email.
+            {!business.emailAvailable && ' Email replies need the email (SMTP) settings under Integrations → Server keys.'}
           </p>
         </div>
         <div className="flex items-center gap-3">

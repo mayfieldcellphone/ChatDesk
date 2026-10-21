@@ -23,7 +23,7 @@ const HELP: Record<string, string> = {
   SMTP_PORT: 'Usually 587',
   SMTP_USER: 'Your email login',
   SMTP_PASS: 'Email password or app password',
-  SMTP_FROM: 'e.g. ChatDesk <alerts@yourshop.com.au>',
+  SMTP_FROM: 'e.g. ChatBird <alerts@yourshop.com.au>',
 };
 
 /** Owner-only panel for entering integration keys without the hosting dashboard. */
@@ -59,7 +59,7 @@ export default function ServerKeys({ onChanged }: { onChanged: () => void }) {
       <div>
         <h2 className="font-semibold">🔑 Server keys</h2>
         <p className="mt-1 text-sm text-slate-500">
-          Only you (the ChatDesk owner) see this. Keys are stored encrypted and work for all your businesses. Secrets are never shown again after saving.
+          Only you (the ChatBird owner) see this. Keys are stored encrypted and work for all your businesses. Secrets are never shown again after saving.
         </p>
       </div>
       {saved && <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">✓ {saved}</p>}

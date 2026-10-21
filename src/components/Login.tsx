@@ -28,7 +28,7 @@ export default function Login({ onSignedIn }: { onSignedIn: (isNewAccount: boole
     <div className="flex h-full items-center justify-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-xl bg-white p-8 shadow">
         <div>
-          <h1 className="text-2xl font-bold">ChatDesk</h1>
+          <h1 className="text-2xl font-bold">ChatBird</h1>
           <p className="text-sm text-slate-500">
             {mode === 'login' ? 'Sign in to your inbox' : 'Create an account for your business'}
           </p>

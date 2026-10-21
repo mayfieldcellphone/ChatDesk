@@ -59,7 +59,7 @@ async function googleFetch<T>(token: string, url: string, init: { method?: strin
 /** Finishes Google sign-in and saves every Business Profile location the account manages. */
 export async function connectGoogleLocations(businessId: string, code: string, redirectUri: string) {
   const tokens = await tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: redirectUri });
-  if (!tokens.refresh_token) throw new GoogleError('Google didn’t return a refresh token. Remove ChatDesk from your Google account’s third-party access and connect again.');
+  if (!tokens.refresh_token) throw new GoogleError('Google didn’t return a refresh token. Remove ChatBird from your Google account’s third-party access and connect again.');
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
 
   const { accounts = [] } = await googleFetch<{ accounts?: { name: string }[] }>(tokens.access_token, api('mybusinessaccountmanagement.googleapis.com/v1/accounts'));
@@ -82,7 +82,7 @@ export async function connectGoogleLocations(businessId: string, code: string, r
         const meta = JSON.stringify({ placeId: location.metadata?.placeId, newReviewUri: location.metadata?.newReviewUri, mapsUri: location.metadata?.mapsUri });
         const existing = get<Connection>("SELECT * FROM connections WHERE provider = 'google' AND external_id = ?", externalId);
         if (existing && existing.business_id !== businessId) {
-          throw new GoogleError(`${location.title} is already connected to another ChatDesk business.`);
+          throw new GoogleError(`${location.title} is already connected to another ChatBird business.`);
         }
         if (existing) {
           run(
@@ -129,7 +129,7 @@ interface GoogleReview {
   reviewReply?: { comment: string; updateTime: string };
 }
 
-/** Pulls the location's reviews into ChatDesk. Alerts about new ones after the first sync. */
+/** Pulls the location's reviews into ChatBird. Alerts about new ones after the first sync. */
 export async function syncReviews(connection: Connection) {
   const business = get<Business>('SELECT * FROM businesses WHERE id = ?', connection.business_id)!;
   const firstSync = !connection.last_synced_at;

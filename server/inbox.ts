@@ -7,7 +7,7 @@ import {
 import { isVisitorOnline, publish, subscribe } from './events';
 import { requireAuth } from './auth';
 import { isOpen, parseHours, validateHours, validTimezone } from './hours';
-import { emailConfigured } from './notify';
+import { emailConfigured, replyAddress } from './notify';
 import { aiConfigured, AiError, suggestReply } from './ai';
 import { rateLimit } from './rateLimit';
 import { fetchRecording, makeCall, smsConfigured, twiml } from './twilio';
@@ -24,7 +24,7 @@ export const inboxRouter = Router();
 inboxRouter.use(requireAuth);
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-const CHANNELS: Channel[] = ['webchat', 'sms', 'facebook', 'instagram'];
+const CHANNELS: Channel[] = ['webchat', 'sms', 'facebook', 'instagram', 'email'];
 
 function publicBusiness(b: Business) {
   return {
@@ -64,6 +64,8 @@ function publicBusiness(b: Business) {
     repairbillKeyHint: b.repairbill_key ? `••••${b.repairbill_key.slice(-4)}` : null,
     repairbillLastSentAt: b.repairbill_last_sent_at,
     repairbillLastError: b.repairbill_last_error,
+    replyEmail: b.reply_email,
+    replyEmailEffective: replyAddress(b),
   };
 }
 
@@ -129,7 +131,7 @@ inboxRouter.delete('/push/subscribe', (req, res) => {
 inboxRouter.post('/push/test', rateLimit('push-test', 10, 10 * 60 * 1000), async (req, res) => {
   const { businessId } = req.session!;
   const business = loadBusiness(businessId);
-  await pushToBusiness(businessId, { title: `ChatDesk · ${business.name}`, body: 'Notifications are working 🎉', url: '/', tag: 'test' });
+  await pushToBusiness(businessId, { title: `ChatBird · ${business.name}`, body: 'Notifications are working 🎉', url: '/', tag: 'test' });
   res.json({ ok: true });
 });
 
@@ -233,6 +235,11 @@ inboxRouter.patch('/business', (req, res) => {
     widget.position, widget.offsetX, widget.offsetY, widget.quote, widget.callback, widget.callNumber,
     widget.repairbillUrl, widget.repairbillKey, businessId,
   );
+  if (b.replyEmail !== undefined) {
+    const replyEmail = String(b.replyEmail ?? '').trim().toLowerCase().slice(0, 200) || null;
+    if (replyEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyEmail)) return res.status(400).json({ error: 'Enter a valid email address for replies' });
+    run('UPDATE businesses SET reply_email = ? WHERE id = ?', replyEmail, businessId);
+  }
   if (widget.repairbillUrl !== business.repairbill_url || widget.repairbillKey !== business.repairbill_key) {
     run('UPDATE businesses SET repairbill_last_sent_at = NULL, repairbill_last_error = NULL WHERE id = ?', businessId);
   }
@@ -289,8 +296,8 @@ inboxRouter.post('/business/repairbill/test', async (req, res) => {
   if (!business.repairbill_url || !business.repairbill_key) return res.status(400).json({ error: 'Save your RepairBill address and key first' });
   try {
     await sendLead(business, {
-      type: 'contact', name: 'ChatDesk test', phone: null, email: null, pageUrl: null,
-      message: `Test from ChatDesk: website enquiries for ${business.name} will arrive here.`,
+      type: 'contact', name: 'ChatBird test', phone: null, email: null, pageUrl: null,
+      message: `Test from ChatBird: website enquiries for ${business.name} will arrive here.`,
     });
     res.json({ business: publicBusiness(loadBusiness(business.id)) });
   } catch (err) {
@@ -475,11 +482,22 @@ inboxRouter.patch('/contacts/:id', (req, res) => {
   const { businessId } = req.session!;
   const contact = get<Contact>('SELECT * FROM contacts WHERE id = ? AND business_id = ?', req.params.id, businessId);
   if (!contact) return res.status(404).json({ error: 'Contact not found' });
-  const name = String(req.body.name ?? '').trim().slice(0, 100);
+  // Each field is optional; an empty phone or email removes it.
+  const name = req.body.name === undefined ? contact.name : String(req.body.name).trim().slice(0, 100);
   if (!name) return res.status(400).json({ error: 'Name is required' });
-  run('UPDATE contacts SET name = ? WHERE id = ?', name, contact.id);
+  let phone = contact.phone;
+  if (req.body.phone !== undefined) {
+    phone = String(req.body.phone).trim() ? normalizePhone(String(req.body.phone)) : null;
+    if (String(req.body.phone).trim() && !phone) return res.status(400).json({ error: 'Enter a valid phone number' });
+  }
+  let email = contact.email;
+  if (req.body.email !== undefined) {
+    email = String(req.body.email).trim().toLowerCase().slice(0, 200) || null;
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Enter a valid email address' });
+  }
+  run('UPDATE contacts SET name = ?, phone = ?, email = ? WHERE id = ?', name, phone, email, contact.id);
   publish(`biz:${businessId}`, { type: 'contact', contactId: contact.id });
-  res.json({ contact: { id: contact.id, name, phone: contact.phone, email: contact.email } });
+  res.json({ contact: { id: contact.id, name, phone, email } });
 });
 
 // Click-to-call: Twilio rings the staff member's phone, then connects them to the customer, who

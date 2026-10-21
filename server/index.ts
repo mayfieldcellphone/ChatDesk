@@ -58,4 +58,4 @@ if (process.env.NODE_ENV === 'production') {
 startReviewSync();
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => console.log(`ChatDesk running on http://localhost:${port}`));
+app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));

@@ -12,19 +12,19 @@ export default function PushControls() {
       <div className="font-medium">Notifications on this device</div>
       {state === 'needs-install' && (
         <p className="text-slate-600">
-          On iPhone, first add ChatDesk to your Home Screen: tap <b>Share</b> <span aria-hidden>⬆️</span> in Safari, then <b>Add to Home Screen</b>. Open ChatDesk from
+          On iPhone, first add ChatBird to your Home Screen: tap <b>Share</b> <span aria-hidden>⬆️</span> in Safari, then <b>Add to Home Screen</b>. Open ChatBird from
           the new icon and come back here to turn notifications on.
         </p>
       )}
       {state === 'unsupported' && <p className="text-slate-600">This browser can’t show notifications. Try Chrome, Edge, Firefox or Safari.</p>}
       {state === 'blocked' && (
         <p className="text-slate-600">
-          Notifications are blocked for ChatDesk. Allow them in your {ios ? 'iPhone Settings → Notifications → ChatDesk' : 'browser’s site settings'}, then reload.
+          Notifications are blocked for ChatBird. Allow them in your {ios ? 'iPhone Settings → Notifications → ChatBird' : 'browser’s site settings'}, then reload.
         </p>
       )}
       {state === 'off' && (
         <>
-          <p className="text-slate-600">Get a notification for every new message, call, voicemail and review, from all your businesses, even when ChatDesk is closed.</p>
+          <p className="text-slate-600">Get a notification for every new message, call, voicemail and review, from all your businesses, even when ChatBird is closed.</p>
           <button onClick={enable} className="rounded-md bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700">
             🔔 Turn on notifications
           </button>

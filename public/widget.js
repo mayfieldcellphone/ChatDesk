@@ -1,7 +1,7 @@
 /*
- * ChatDesk website chat widget.
+ * ChatBird website chat widget.
  * Embed with: <script src="https://YOUR-CHATDESK-SERVER/widget.js" data-key="WIDGET_KEY" async></script>
- * Optional, to override the position set in ChatDesk for one site:
+ * Optional, to override the position set in ChatBird for one site:
  *   data-position="left|right" data-offset-x="20" data-offset-y="20" (pixels from the side and bottom)
  */
 (function () {
@@ -10,7 +10,7 @@
   var script = document.currentScript;
   if (!script || window.__chatdeskLoaded) return;
   var key = script.getAttribute('data-key');
-  if (!key) return console.warn('ChatDesk: missing data-key on the widget script tag');
+  if (!key) return console.warn('ChatBird: missing data-key on the widget script tag');
   window.__chatdeskLoaded = true;
 
   var base = new URL(script.src).origin;
@@ -367,7 +367,7 @@
   }
 
   // ---------- Placement ----------
-  // Set in ChatDesk, or per site with data-position / data-offset-x / data-offset-y on the script tag.
+  // Set in ChatBird, or per site with data-position / data-offset-x / data-offset-y on the script tag.
   function px(value, fallback) {
     var n = parseInt(value, 10);
     return isFinite(n) && n >= 0 && n <= 400 ? n : fallback;
@@ -409,6 +409,6 @@
       })
       .catch(function () { reset(); });
   }).catch(function (err) {
-    console.warn('ChatDesk: could not load widget -', err.message);
+    console.warn('ChatBird: could not load widget -', err.message);
   });
 })();

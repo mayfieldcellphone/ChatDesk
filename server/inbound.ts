@@ -18,7 +18,7 @@ export function onInboundMessage(business: Business, conversation: Conversation,
   pushMessage(business, conversation, message).catch((err) => console.error('Push failed:', err));
 }
 
-const CHANNEL_WORDS = { webchat: 'Chat', sms: 'Text', facebook: 'Messenger', instagram: 'Instagram' } as const;
+const CHANNEL_WORDS = { webchat: 'Chat', sms: 'Text', facebook: 'Messenger', instagram: 'Instagram', email: 'Email' } as const;
 
 /** Phone/desktop notification for a customer message, call or voicemail. */
 export async function pushMessage(business: Business, conversation: Conversation, message: Message) {

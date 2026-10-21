@@ -23,6 +23,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   const [pickerQuery, setPickerQuery] = useState('');
   const [calling, setCalling] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [details, setDetails] = useState<{ phone: string; email: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
 
@@ -140,6 +141,22 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
     }
   };
 
+  const saveDetails = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!conversation || !details) return;
+    try {
+      await api(`/contacts/${conversation.contact.id}`, { method: 'PATCH', body: details });
+      setDetails(null);
+      setError('');
+      // New details can add or remove ways to reply (e.g. Email).
+      const c = await load();
+      if (c.defaultChannel && !c.replyChannels.includes(channel)) setChannel(c.defaultChannel);
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const requestReview = async () => {
     setError('');
     if (!business.reviewLinkEffective) {
@@ -217,6 +234,12 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
           </div>
           <div className="truncate text-xs text-slate-500">
             {[contact.phone, contact.email].filter(Boolean).join(' · ')}
+            <button
+              onClick={() => setDetails({ phone: contact.phone ?? '', email: contact.email ?? '' })}
+              className={`${contact.phone || contact.email ? 'ml-2 ' : ''}text-blue-600 hover:underline`}
+            >
+              {contact.email ? 'Edit' : '+ Add email'}
+            </button>
             {conversation.pageUrl && (
               <>
                 {' · from '}
@@ -244,6 +267,14 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
           {conversation.status === 'open' ? 'Close' : 'Reopen'}
         </button>
       </header>
+      {details && (
+        <form onSubmit={saveDetails} className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm md:px-6">
+          <input className="w-40 rounded border border-slate-300 px-2 py-1" placeholder="Mobile" value={details.phone} onChange={(e) => setDetails({ ...details, phone: e.target.value })} />
+          <input autoFocus type="email" className="w-56 rounded border border-slate-300 px-2 py-1" placeholder="Email" value={details.email} onChange={(e) => setDetails({ ...details, email: e.target.value })} />
+          <button className="rounded bg-blue-600 px-3 py-1 font-medium text-white">Save</button>
+          <button type="button" onClick={() => setDetails(null)} className="text-slate-500 hover:underline">Cancel</button>
+        </form>
+      )}
       {calling && <div className="border-b border-green-200 bg-green-50 px-4 py-2 md:px-6 text-sm text-green-800">{calling}</div>}
 
       <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 px-4 py-4 md:px-6">
@@ -350,11 +381,14 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
               onClick={() => setChannel(c)}
               className={`rounded-full px-3 py-1 ${channel === c ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
             >
-              {c === 'webchat' ? 'Web chat' : c === 'sms' ? `Text ${contact.phone ?? ''}` : CHANNEL_LABELS[c]}
+              {c === 'webchat' ? 'Web chat' : c === 'sms' ? `Text ${contact.phone ?? ''}` : c === 'email' ? `Email ${contact.email ?? ''}` : CHANNEL_LABELS[c]}
             </button>
           ))}
           {channel === 'webchat' && !conversation.online && (
             <span className="text-amber-600">They'll see this next time they open your website.</span>
+          )}
+          {channel === 'email' && business.replyEmailEffective && (
+            <span className="text-slate-500">Their reply goes to {business.replyEmailEffective}.</span>
           )}
           <span className="ml-auto flex gap-2">
             <button
