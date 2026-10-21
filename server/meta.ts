@@ -81,7 +81,7 @@ export async function connectMetaAccounts(businessId: string, code: string, redi
   });
   const pages = await graph<{ data: PageInfo[] }>('/me/accounts', {
     token: long.access_token,
-    params: { fields: 'id,name,access_token,instagram_business_account{id,username,name}', limit: '100' },
+    params: { fields: 'id,name,access_token', limit: '100' },
   });
   if (pages.data.length === 0) throw new MetaError('No Facebook Pages were shared. Choose at least one Page when Facebook asks.');
 
@@ -96,7 +96,13 @@ export async function connectMetaAccounts(businessId: string, code: string, redi
     saveConnection(businessId, 'facebook', page.id, page.name, page.access_token, { pageId: page.id });
     connected.push(page.name);
 
-    const ig = page.instagram_business_account;
+    // Asked separately: without Instagram permissions this fails, and Messenger should still connect.
+    const ig = await graph<Pick<PageInfo, 'instagram_business_account'>>(`/${page.id}`, {
+      token: page.access_token,
+      params: { fields: 'instagram_business_account{id,username,name}' },
+    })
+      .then((r) => r.instagram_business_account)
+      .catch(() => undefined);
     if (ig) {
       saveConnection(businessId, 'instagram', ig.id, ig.username ? `@${ig.username}` : ig.name || 'Instagram', page.access_token, { pageId: page.id });
       connected.push(ig.username ? `@${ig.username}` : 'Instagram');
