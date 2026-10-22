@@ -6,8 +6,9 @@ import Settings from './components/Settings';
 import Reviews from './components/Reviews';
 import Integrations from './components/Integrations';
 import Reports from './components/Reports';
+import Marketing from './components/Marketing';
 
-const VIEWS = ['inbox', 'reports', 'reviews', 'integrations', 'settings'] as const;
+const VIEWS = ['inbox', 'reports', 'marketing', 'reviews', 'integrations', 'settings'] as const;
 type View = (typeof VIEWS)[number];
 
 /**
@@ -172,6 +173,8 @@ export default function App() {
           />
         ) : view === 'reports' ? (
           <Reports key={me.business.id} business={me.business} businessCount={me.businesses.length} onOpenConversation={openConversation} />
+        ) : view === 'marketing' ? (
+          <Marketing key={me.business.id} business={me.business} />
         ) : view === 'reviews' ? (
           <Reviews key={me.business.id} business={me.business} onSaved={(business) => setMe({ ...me, business })} onOpenIntegrations={() => setView('integrations')} />
         ) : view === 'integrations' ? (

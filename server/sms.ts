@@ -3,6 +3,8 @@ import { get, insertMessage, normalizePhone, type Business } from './db';
 import { publish } from './events';
 import { onInboundMessage } from './inbound';
 import { phoneConversation } from './phone';
+import { handleOptOutText } from './campaigns';
+import { sendToCustomer } from './outbound';
 import { twiml, verifyTwilio } from './twilio';
 
 export const smsRouter = Router();
@@ -26,6 +28,13 @@ smsRouter.post('/inbound', (req, res) => {
     type: 'message',
     message: { id: message.id, direction: 'in', body: message.body, created_at: message.created_at },
   });
+  // STOP / START: confirm straight away instead of the usual auto-replies.
+  const optOut = handleOptOutText(business, from, body);
+  if (optOut) {
+    publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: { ...message, author_name: null } });
+    sendToCustomer(business, conversation, 'sms', optOut, { automated: true }).catch((err) => console.error('Opt-out confirmation failed:', err.message));
+    return reply();
+  }
   onInboundMessage(business, conversation, message);
   reply();
 });

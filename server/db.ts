@@ -280,6 +280,38 @@ db.exec(`
 addColumn('businesses', 'weekly_report', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('businesses', 'weekly_report_sent_on', 'TEXT');
 
+// Marketing (campaigns.ts): where an imported contact came from, when they were last in touch before
+// ChatBird, and when they unsubscribed from marketing (replied STOP or clicked unsubscribe).
+addColumn('contacts', 'source', 'TEXT');
+addColumn('contacts', 'last_contact_at', 'TEXT');
+addColumn('contacts', 'opted_out_at', 'TEXT');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK (channel IN ('sms', 'email')),
+    subject TEXT,
+    body TEXT NOT NULL,
+    audience TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL CHECK (status IN ('sending', 'paused', 'done', 'cancelled')),
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    finished_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS campaigns_business ON campaigns(business_id, created_at);
+  CREATE TABLE IF NOT EXISTS campaign_recipients (
+    campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'skipped')),
+    error TEXT,
+    sent_at TEXT,
+    PRIMARY KEY (campaign_id, contact_id)
+  );
+  CREATE INDEX IF NOT EXISTS campaign_recipients_pending ON campaign_recipients(campaign_id, status);
+  CREATE INDEX IF NOT EXISTS contacts_email ON contacts(business_id, email);
+`);
+
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
 export interface Business {
@@ -333,6 +365,9 @@ export interface Contact {
   email: string | null;
   facebook_id?: string | null;
   instagram_id?: string | null;
+  source?: string | null;
+  last_contact_at?: string | null;
+  opted_out_at?: string | null;
 }
 
 export interface Conversation {

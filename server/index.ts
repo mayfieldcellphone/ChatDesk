@@ -11,6 +11,7 @@ import { voiceRouter } from './voice';
 import { widgetRouter } from './widget';
 import { leadsRouter } from './leads';
 import { reportsRouter, startWeeklyReports } from './reports';
+import { marketingRouter, startCampaigns, unsubscribeRouter } from './campaigns';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -23,13 +24,17 @@ app.use('/api/sms', smsRouter);
 app.use('/api/voice', voiceRouter);
 // Meta signs the raw request body, so this router reads it before the JSON parser.
 app.use('/api/meta', metaWebhookRouter);
+// Customer imports send up to 2,000 rows at a time.
+app.use('/api/marketing/contacts/import', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '50kb' }));
+app.use('/api/unsubscribe', unsubscribeRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/widget', widgetRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/integrations', integrationsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/marketing', marketingRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -61,6 +66,7 @@ if (process.env.NODE_ENV === 'production') {
 
 startReviewSync();
 startWeeklyReports();
+startCampaigns();
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));

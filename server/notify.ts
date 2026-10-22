@@ -109,6 +109,24 @@ export async function emailWeeklyReport(business: Business, subject: string, tex
   return true;
 }
 
+/** One marketing email (campaigns.ts), in the business's name, with an unsubscribe link and one-click header. */
+export async function emailCampaign(business: Business, to: string, subject: string, body: string, unsubscribe: string) {
+  const mailer = getTransport();
+  if (!mailer) throw new Error('Email is not set up on the server');
+  const from = config('SMTP_FROM')!;
+  const address = from.match(/<([^>]+)>/)?.[1] ?? from.trim();
+  const name = business.name.replace(/[\r\n"]+/g, ' ');
+  const replyTo = replyAddress(business);
+  await mailer.sendMail({
+    from: { name, address },
+    to,
+    ...(replyTo ? { replyTo: { name, address: replyTo } } : {}),
+    subject: subject.replace(/[\r\n]+/g, ' '),
+    text: `${body}\n\n— ${business.name}\n\nDon't want these emails? Unsubscribe: ${unsubscribe}`,
+    headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+  });
+}
+
 /** The address customers' answers go to: the business's reply address, or the owner's login email. */
 export function replyAddress(business: Business) {
   if (business.reply_email) return business.reply_email;
