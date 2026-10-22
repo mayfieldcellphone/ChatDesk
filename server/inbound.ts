@@ -4,6 +4,7 @@ import { isOpen } from './hours';
 import { emailTeam } from './notify';
 import { pushToBusiness } from './push';
 import { replyChannels, sendToCustomer } from './outbound';
+import { assistantTakesMessage } from './assistant';
 
 const AWAY_REPEAT_MS = 12 * 60 * 60 * 1000;
 
@@ -13,7 +14,9 @@ const AWAY_REPEAT_MS = 12 * 60 * 60 * 1000;
  */
 export function onInboundMessage(business: Business, conversation: Conversation, message: Message, { awayMessage = true } = {}) {
   publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: { ...message, author_name: null } });
-  if (awayMessage) sendAwayMessageIfClosed(business, conversation).catch((err) => console.error('Away message failed:', err));
+  // When the AI assistant answers straight away, its reply (or holding message) replaces the away message.
+  const assistantAnswers = assistantTakesMessage(business, conversation, message);
+  if (awayMessage && !assistantAnswers) sendAwayMessageIfClosed(business, conversation).catch((err) => console.error('Away message failed:', err));
   emailTeam(business, conversation, message).catch((err) => console.error('Email alert failed:', err));
   pushMessage(business, conversation, message).catch((err) => console.error('Push failed:', err));
 }

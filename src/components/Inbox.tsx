@@ -207,7 +207,7 @@ export default function Inbox({ business, businesses, initialConversationId, onS
                 )}
                 <div className="mt-0.5 flex items-center gap-2">
                   <span className={`truncate text-xs ${c.unreadCount ? 'text-slate-800' : 'text-slate-500'}`}>
-                    {c.lastDirection === 'out' && 'You: '}
+                    {c.lastDirection === 'out' && (c.lastAutomated === 2 ? '🤖 ' : c.lastAutomated ? 'Auto: ' : 'You: ')}
                     {c.lastMessage}
                   </span>
                   <span className="ml-auto shrink-0 rounded bg-slate-100 px-1.5 text-[10px] uppercase text-slate-500">

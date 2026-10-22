@@ -171,6 +171,17 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
     }
   };
 
+  const toggleAssistant = async () => {
+    if (!conversation) return;
+    const assistantPaused = !conversation.assistantPaused;
+    try {
+      await api(`/conversations/${conversation.id}`, { method: 'PATCH', body: { assistantPaused } });
+      setConversation({ ...conversation, assistantPaused });
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const setTags = (tags: Tag[]) => {
     setConversation((c) => (c ? { ...c, tags } : c));
     onChanged();
@@ -294,6 +305,15 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
             📞 Call back
           </button>
         )}
+        {business.assistantMode !== 'off' && (
+          <button
+            onClick={toggleAssistant}
+            className={`shrink-0 rounded-md border px-3 py-1.5 text-sm ${conversation.assistantPaused ? 'border-slate-300 text-slate-500' : 'border-violet-300 bg-violet-50 text-violet-700'}`}
+            title={conversation.assistantPaused ? 'The assistant is not answering in this conversation' : 'The assistant may answer this customer from your FAQs'}
+          >
+            🤖 {conversation.assistantPaused ? 'Assistant paused' : 'Assistant on'}
+          </button>
+        )}
         <button
           onClick={() => setStatus(conversation.status === 'open' ? 'closed' : 'open')}
           className={`${contact.phone && business.smsAvailable && business.smsNumber ? '' : 'ml-auto '}shrink-0 rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50`}
@@ -341,7 +361,9 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
             <div className="max-w-[85%] md:max-w-[70%]">
               <div
                 className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm ${
-                  m.automated
+                  m.automated === 2
+                    ? 'rounded-br-sm bg-violet-100 text-violet-900'
+                    : m.automated
                     ? 'rounded-br-sm bg-slate-200 text-slate-700'
                     : m.direction === 'out'
                       ? 'rounded-br-sm bg-blue-600 text-white'
@@ -351,7 +373,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
                 {m.body}
               </div>
               <div className={`mt-1 text-[11px] text-slate-400 ${m.direction === 'out' ? 'text-right' : ''}`}>
-                {m.automated ? 'Sent automatically · ' : m.direction === 'out' && m.author_name ? `${m.author_name} · ` : ''}
+                {m.automated === 2 ? '🤖 Assistant · ' : m.automated ? 'Sent automatically · ' : m.direction === 'out' && m.author_name ? `${m.author_name} · ` : ''}
                 {CHANNEL_LABELS[m.channel]} · {new Date(m.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
               </div>
             </div>

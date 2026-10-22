@@ -300,6 +300,8 @@ export interface Business {
   lead_token: string | null;
   booking_reply_enabled: number;
   booking_reply_text: string;
+  assistant_mode: 'off' | 'always' | 'after_hours' | 'no_reply';
+  assistant_handoff: string;
   created_at: string;
 }
 
@@ -326,6 +328,8 @@ export interface Conversation {
   created_at: string;
   /** For Facebook/Instagram conversations: the connected Page or account the customer messaged. */
   connection_id?: string | null;
+  /** 1 once staff have replied (or paused it): the AI assistant stays out of this conversation. */
+  assistant_paused?: number;
 }
 
 export interface Message {
@@ -419,6 +423,8 @@ export function run(sql: string, ...params: (string | number | null)[]) {
 export interface MessageOptions {
   authorId?: string | null;
   automated?: boolean;
+  /** Written by the AI assistant (stored as automated = 2). */
+  assistant?: boolean;
   kind?: MessageKind;
   recordingSid?: string | null;
   duration?: number | null;
@@ -430,7 +436,7 @@ export function insertMessage(
   direction: 'in' | 'out',
   channel: Channel,
   body: string,
-  { authorId = null, automated = false, kind = 'text', recordingSid = null, duration = null, externalId = null }: MessageOptions = {},
+  { authorId = null, automated = false, assistant = false, kind = 'text', recordingSid = null, duration = null, externalId = null }: MessageOptions = {},
 ): Message {
   const message: Message = {
     id: newId(),
@@ -439,7 +445,7 @@ export function insertMessage(
     channel,
     body,
     author_id: authorId,
-    automated: automated ? 1 : 0,
+    automated: assistant ? 2 : automated ? 1 : 0,
     kind,
     recording_sid: recordingSid,
     duration,
@@ -555,3 +561,34 @@ export function seedTags(businessId: string) {
   }
 }
 for (const b of all<{ id: string }>('SELECT id FROM businesses WHERE tags_seeded = 0')) seedTags(b.id);
+
+// ---------- AI assistant ----------
+// FAQs the assistant answers from, and when it may answer customers on its own (assistant.ts).
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS faqs (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS faqs_business ON faqs(business_id, created_at);
+`);
+// 'off' | 'always' | 'after_hours' | 'no_reply' (only if nobody has replied within a couple of minutes).
+addColumn('businesses', 'assistant_mode', "TEXT NOT NULL DEFAULT 'off'");
+addColumn(
+  'businesses',
+  'assistant_handoff',
+  "TEXT NOT NULL DEFAULT 'Thanks for your message! A team member will get back to you shortly.'",
+);
+// Set when staff reply in a conversation (or pause it), so the assistant never talks over them.
+addColumn('conversations', 'assistant_paused', 'INTEGER NOT NULL DEFAULT 0');
+
+export interface Faq {
+  id: string;
+  business_id: string;
+  question: string;
+  answer: string;
+  created_at: string;
+}

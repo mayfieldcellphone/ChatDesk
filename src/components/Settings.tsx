@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import WebsiteImport from './WebsiteImport';
 import { ColorChoices, TagPill } from './Tags';
 import PushControls from './PushControls';
-import { api, DAYS, TAG_COLORS, type Business, type Day, type SavedReply, type Tag, type WeeklyHours } from '../api';
+import { api, DAYS, TAG_COLORS, type Business, type Day, type Faq, type SavedReply, type Tag, type WeeklyHours } from '../api';
 
 interface Props {
   business: Business;
@@ -82,6 +82,8 @@ export default function Settings(props: Props & { autoImport?: boolean }) {
           <SavedRepliesSection />
           <TagsSection />
           <AiSection {...props} />
+          <AssistantSection {...props} />
+          <FaqSection />
           <NotificationsSection {...props} />
         </div>
       </div>
@@ -656,6 +658,208 @@ function TagsSection() {
           <StatusText status={status} />
         </div>
       )}
+    </Card>
+  );
+}
+
+const ASSISTANT_MODES: { value: Business['assistantMode']; label: string; hint: string }[] = [
+  { value: 'off', label: 'Off', hint: 'Only you reply.' },
+  { value: 'always', label: 'Always, straight away', hint: 'Customers get an answer within seconds, day or night.' },
+  { value: 'after_hours', label: 'Only outside opening hours', hint: 'You reply while the shop is open. Needs office hours turned on.' },
+  { value: 'no_reply', label: 'Only if nobody replies within 2 minutes', hint: 'A safety net when you’re busy.' },
+];
+
+/** When the AI assistant answers customers on its own, and what it says when it can't. */
+function AssistantSection({ business, onSaved }: Props) {
+  const [form, setForm] = useState({ assistantMode: business.assistantMode, assistantHandoff: business.assistantHandoff });
+  const { save, status, busy } = useBusinessSave(onSaved);
+  const [question, setQuestion] = useState('');
+  const [trial, setTrial] = useState<{ action: string; reply: string } | null>(null);
+  const [trialError, setTrialError] = useState('');
+  const [trying, setTrying] = useState(false);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    save(form);
+  };
+  const tryIt = async () => {
+    setTrying(true);
+    setTrial(null);
+    setTrialError('');
+    try {
+      setTrial(await api<{ action: string; reply: string }>('/assistant/test', { method: 'POST', body: { question } }));
+    } catch (err) {
+      setTrialError((err as Error).message);
+    }
+    setTrying(false);
+  };
+  return (
+    <form onSubmit={submit}>
+      <Card
+        title="AI assistant"
+        description="Answers customers in web chat and texts on its own, using only your FAQs and AI notes. If the answer isn’t there, it sends your holding message and tags the conversation “Needs reply”. Once you reply in a conversation, it stays quiet there."
+      >
+        {!business.aiAvailable && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">Needs ANTHROPIC_API_KEY under Integrations → Server keys.</p>}
+        <div className="space-y-2">
+          {ASSISTANT_MODES.map((m) => (
+            <label key={m.value} className="flex cursor-pointer items-start gap-2 text-sm">
+              <input type="radio" name="assistantMode" className="mt-0.5" checked={form.assistantMode === m.value} onChange={() => setForm({ ...form, assistantMode: m.value })} />
+              <span>
+                <span className="font-medium">{m.label}</span> <span className="text-slate-500">{m.hint}</span>
+              </span>
+            </label>
+          ))}
+          {form.assistantMode === 'after_hours' && !business.hoursEnabled && (
+            <p className="text-xs text-amber-700">Office hours are off, so ChatBird treats you as always open and the assistant won’t answer. Turn them on under Office hours.</p>
+          )}
+        </div>
+        <div>
+          <label className={label} htmlFor="handoff">Holding message (when it can’t answer)</label>
+          <textarea id="handoff" rows={2} maxLength={500} className={input} value={form.assistantHandoff} onChange={(e) => setForm({ ...form, assistantHandoff: e.target.value })} required />
+          <p className="mt-1 text-xs text-slate-500">Outside opening hours your away message is used instead.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button disabled={busy} className={primary}>Save</button>
+          <StatusText status={status} />
+        </div>
+        <div className="space-y-2 border-t border-slate-100 pt-4">
+          <span className={label}>Try it (nothing is sent)</span>
+          <div className="flex gap-2">
+            <input className={input} placeholder="e.g. Do you fix Samsung back glass?" value={question} onChange={(e) => setQuestion(e.target.value)} />
+            <button type="button" onClick={tryIt} disabled={trying || !question.trim()} className="shrink-0 rounded-md border border-slate-300 px-3 text-sm hover:bg-slate-50 disabled:opacity-50">
+              {trying ? 'Thinking…' : 'Ask'}
+            </button>
+          </div>
+          {trialError && <p className="text-sm text-red-600">{trialError}</p>}
+          {trial && (
+            <div className={`rounded-md p-3 text-sm ${trial.action === 'answer' ? 'bg-violet-50 text-violet-900' : 'bg-amber-50 text-amber-900'}`}>
+              <div className="mb-1 text-xs font-medium">{trial.action === 'answer' ? '🤖 Would answer:' : 'Not in your FAQs, so it would send the holding message and tag “Needs reply”:'}</div>
+              {trial.reply}
+            </div>
+          )}
+        </div>
+      </Card>
+    </form>
+  );
+}
+
+/** The questions and answers the assistant uses: add, edit, delete, import from a spreadsheet. */
+function FaqSection() {
+  const [faqs, setFaqs] = useState<Faq[]>([]);
+  const [filter, setFilter] = useState('');
+  const [editing, setEditing] = useState<{ id: string | null; question: string; answer: string } | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [paste, setPaste] = useState('');
+  const [status, setStatus] = useState<Status>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [onlyGaps, setOnlyGaps] = useState(false);
+
+  const load = () => api<{ faqs: Faq[] }>('/faqs').then((d) => setFaqs(d.faqs)).catch((err) => setStatus({ ok: false, text: err.message }));
+  useEffect(() => {
+    load();
+  }, []);
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    try {
+      const body = { question: editing.question, answer: editing.answer };
+      if (editing.id) await api(`/faqs/${editing.id}`, { method: 'PATCH', body });
+      else await api('/faqs', { method: 'POST', body });
+      setEditing(null);
+      setStatus({ ok: true, text: 'Saved' });
+      load();
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message });
+    }
+  };
+  const remove = async (f: Faq) => {
+    if (!confirm(`Delete “${f.question}”?`)) return;
+    await api(`/faqs/${f.id}`, { method: 'DELETE' });
+    load();
+  };
+  const importText = async (text: string) => {
+    try {
+      const r = await api<{ added: number; skipped: number }>('/faqs/import', { method: 'POST', body: { text } });
+      setStatus({ ok: true, text: `Added ${r.added} FAQ${r.added === 1 ? '' : 's'}${r.skipped ? `, skipped ${r.skipped} (duplicates or empty)` : ''}` });
+      setImporting(false);
+      setPaste('');
+      load();
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message });
+    }
+  };
+
+  const q = filter.trim().toLowerCase();
+  const shown = faqs.filter((f) => (!onlyGaps || f.needsEditing) && (!q || `${f.question} ${f.answer}`.toLowerCase().includes(q)));
+  const needEdit = faqs.filter((f) => f.needsEditing).length;
+  const form = editing && (
+    <form onSubmit={save} className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <input className={input} placeholder="Question" maxLength={300} value={editing.question} onChange={(e) => setEditing({ ...editing, question: e.target.value })} required autoFocus />
+      <textarea className={input} rows={3} placeholder="Answer" maxLength={2000} value={editing.answer} onChange={(e) => setEditing({ ...editing, answer: e.target.value })} required />
+      <div className="flex gap-3">
+        <button className={primary}>{editing.id ? 'Save' : 'Add FAQ'}</button>
+        <button type="button" onClick={() => setEditing(null)} className="text-sm text-slate-500 hover:underline">Cancel</button>
+      </div>
+    </form>
+  );
+
+  return (
+    <Card title={`FAQs (${faqs.length})`} description="What the assistant answers from. Keep answers factual: prices, hours, warranty, what you repair.">
+      {needEdit > 0 && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {needEdit} FAQ{needEdit === 1 ? ' still has a' : 's still have'} template gap{needEdit === 1 ? '' : 's'} like “[Business hours]”. The assistant skips {needEdit === 1 ? 'it' : 'them'} until you fill {needEdit === 1 ? 'it' : 'them'} in.{' '}
+          <button className="underline" onClick={() => setOnlyGaps(!onlyGaps)}>{onlyGaps ? 'Show all' : 'Show them'}</button>
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <input className={`${input} max-w-xs`} placeholder="Search FAQs" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <button onClick={() => setEditing({ id: null, question: '', answer: '' })} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">+ Add FAQ</button>
+        <button onClick={() => setImporting(!importing)} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Import</button>
+      </div>
+      {importing && (
+        <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
+          <p className="text-slate-600">Choose a CSV file with Question and Answer columns, or copy the two columns from Excel and paste them below.</p>
+          <input
+            type="file"
+            accept=".csv,.tsv,.txt,text/csv"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) importText(await file.text());
+            }}
+          />
+          <textarea className={input} rows={4} placeholder="Paste from Excel here" value={paste} onChange={(e) => setPaste(e.target.value)} />
+          <button disabled={!paste.trim()} onClick={() => importText(paste)} className={primary}>Import pasted FAQs</button>
+        </div>
+      )}
+      {editing?.id === null && form}
+      <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
+        {shown.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">{faqs.length ? 'No FAQs match.' : 'No FAQs yet.'}</li>}
+        {(showAll || q || onlyGaps ? shown : shown.slice(0, 10)).map((f) =>
+          editing?.id === f.id ? (
+            <li key={f.id} className="p-2">{form}</li>
+          ) : (
+            <li key={f.id} className="px-3 py-2 text-sm">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium">{f.question}</div>
+                  <div className="mt-0.5 line-clamp-2 text-slate-500">{f.answer}</div>
+                  {f.needsEditing && <div className="mt-0.5 text-xs text-amber-700">Has a template gap; edit before the assistant uses it</div>}
+                </div>
+                <span className="flex shrink-0 gap-3">
+                  <button onClick={() => setEditing({ id: f.id, question: f.question, answer: f.answer })} className="text-blue-600 hover:underline">Edit</button>
+                  <button onClick={() => remove(f)} className="text-red-600 hover:underline">Delete</button>
+                </span>
+              </div>
+            </li>
+          ),
+        )}
+      </ul>
+      {!q && !onlyGaps && shown.length > 10 && (
+        <button onClick={() => setShowAll(!showAll)} className="text-sm text-blue-600 hover:underline">
+          {showAll ? 'Show fewer' : `Show all ${shown.length}`}
+        </button>
+      )}
+      <StatusText status={status} />
     </Card>
   );
 }

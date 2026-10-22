@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { Readable } from 'node:stream';
 import {
   all, get, insertMessage, newId, normalizePhone, now, run,
-  type Business, type Channel, type Contact, type Conversation, type Message, type SavedReply, type Tag,
+  type Business, type Channel, type Contact, type Conversation, type Message, type SavedReply, type Tag, type Faq,
 } from './db';
 import { isVisitorOnline, publish, subscribe } from './events';
 import { requireAuth } from './auth';
@@ -16,6 +16,7 @@ import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
 import { normalizeRepairbillUrl, sendLead } from './repairbill';
 import { leadToken } from './leads';
+import { decide, faqNeedsEditing, parseTable } from './assistant';
 import { pushPublicKey, pushToBusiness } from './push';
 import { createBusiness, setSession } from './auth';
 import { isAdmin } from './config';
@@ -66,6 +67,8 @@ function publicBusiness(b: Business) {
     repairbillLastSentAt: b.repairbill_last_sent_at,
     repairbillLastError: b.repairbill_last_error,
     replyEmail: b.reply_email,
+    assistantMode: b.assistant_mode,
+    assistantHandoff: b.assistant_handoff,
     bookingReplyEnabled: Boolean(b.booking_reply_enabled),
     bookingReplyText: b.booking_reply_text,
     // Where a website's own server posts its forms (bookings, quotes) so they land in the inbox.
@@ -237,6 +240,10 @@ inboxRouter.patch('/business', (req, res) => {
   const bookingReplyEnabled = b.bookingReplyEnabled === undefined ? business.booking_reply_enabled : b.bookingReplyEnabled ? 1 : 0;
   const bookingReplyText = text(b.bookingReplyText, business.booking_reply_text, 600);
   if (!bookingReplyText) return res.status(400).json({ error: 'The booking reply needs some text' });
+  const assistantMode = b.assistantMode === undefined ? business.assistant_mode : b.assistantMode;
+  if (!['off', 'always', 'after_hours', 'no_reply'].includes(assistantMode)) return res.status(400).json({ error: 'Choose when the assistant answers' });
+  const assistantHandoff = text(b.assistantHandoff, business.assistant_handoff, 500);
+  if (!assistantHandoff) return res.status(400).json({ error: 'The assistant’s holding message needs some text' });
   let replyEmail = business.reply_email;
   if (b.replyEmail !== undefined) {
     replyEmail = String(b.replyEmail ?? '').trim().toLowerCase().slice(0, 200) || null;
@@ -244,7 +251,10 @@ inboxRouter.patch('/business', (req, res) => {
   }
 
   if (b.websiteImported === true) run('UPDATE businesses SET website_imported_at = ? WHERE id = ?', now(), businessId);
-  run('UPDATE businesses SET booking_reply_enabled = ?, booking_reply_text = ?, reply_email = ? WHERE id = ?', bookingReplyEnabled, bookingReplyText, replyEmail, businessId);
+  run(
+    'UPDATE businesses SET booking_reply_enabled = ?, booking_reply_text = ?, reply_email = ?, assistant_mode = ?, assistant_handoff = ? WHERE id = ?',
+    bookingReplyEnabled, bookingReplyText, replyEmail, assistantMode, assistantHandoff, businessId,
+  );
   run(
     `UPDATE businesses SET widget_position = ?, widget_offset_x = ?, widget_offset_y = ?, widget_quote = ?, widget_callback = ?,
        widget_call_number = ?, repairbill_url = ?, repairbill_key = ? WHERE id = ?`,
@@ -320,6 +330,83 @@ inboxRouter.post('/business/repairbill/test', async (req, res) => {
     res.json({ business: publicBusiness(loadBusiness(business.id)) });
   } catch (err) {
     res.status(502).json({ error: (err as Error).message });
+  }
+});
+
+// ---------- FAQs (what the AI assistant answers from) ----------
+
+const publicFaq = (f: Faq) => ({ id: f.id, question: f.question, answer: f.answer, needsEditing: faqNeedsEditing(f) });
+
+function readFaq(body: Record<string, unknown>) {
+  const question = String(body.question ?? '').trim().slice(0, 300);
+  const answer = String(body.answer ?? '').trim().slice(0, 2000);
+  if (!question || !answer) return { error: 'Each FAQ needs a question and an answer' };
+  return { question, answer };
+}
+
+inboxRouter.get('/faqs', (req, res) => {
+  const rows = all<Faq>('SELECT * FROM faqs WHERE business_id = ? ORDER BY created_at', req.session!.businessId);
+  res.json({ faqs: rows.map(publicFaq) });
+});
+
+inboxRouter.post('/faqs', (req, res) => {
+  const faq = readFaq(req.body);
+  if ('error' in faq) return res.status(400).json({ error: faq.error });
+  const row: Faq = { id: newId(), business_id: req.session!.businessId, ...faq, created_at: now() };
+  run('INSERT INTO faqs (id, business_id, question, answer, created_at) VALUES (?, ?, ?, ?, ?)', row.id, row.business_id, row.question, row.answer, row.created_at);
+  res.status(201).json({ faq: publicFaq(row) });
+});
+
+inboxRouter.patch('/faqs/:id', (req, res) => {
+  const current = get<Faq>('SELECT * FROM faqs WHERE id = ? AND business_id = ?', req.params.id, req.session!.businessId);
+  if (!current) return res.status(404).json({ error: 'FAQ not found' });
+  const faq = readFaq({ question: current.question, answer: current.answer, ...req.body });
+  if ('error' in faq) return res.status(400).json({ error: faq.error });
+  run('UPDATE faqs SET question = ?, answer = ? WHERE id = ?', faq.question, faq.answer, current.id);
+  res.json({ faq: publicFaq({ ...current, ...faq }) });
+});
+
+inboxRouter.delete('/faqs/:id', (req, res) => {
+  run('DELETE FROM faqs WHERE id = ? AND business_id = ?', req.params.id, req.session!.businessId);
+  res.json({ ok: true });
+});
+
+/** Adds FAQs from a CSV or a paste from Excel (Question, Answer columns). Skips the header and exact duplicates. */
+inboxRouter.post('/faqs/import', (req, res) => {
+  const { businessId } = req.session!;
+  const rows = parseTable(String(req.body.text ?? '').slice(0, 500_000));
+  if (rows.length && /question/i.test(rows[0][0] ?? '') && /answer/i.test(rows[0][1] ?? '')) rows.shift();
+  const existing = new Set(all<Faq>('SELECT * FROM faqs WHERE business_id = ?', businessId).map((f) => f.question.trim().toLowerCase()));
+  let added = 0;
+  let skipped = 0;
+  const t = now();
+  for (const [i, r] of rows.entries()) {
+    const faq = readFaq({ question: r[0], answer: r[1] });
+    if ('error' in faq || existing.has(faq.question.toLowerCase())) {
+      skipped++;
+      continue;
+    }
+    existing.add(faq.question.toLowerCase());
+    // Keep the file's order: created_at increases row by row.
+    run('INSERT INTO faqs (id, business_id, question, answer, created_at) VALUES (?, ?, ?, ?, ?)', newId(), businessId, faq.question, faq.answer, new Date(Date.parse(t) + i).toISOString());
+    added++;
+  }
+  res.json({ added, skipped });
+});
+
+/** Shows what the assistant would reply to a question, without sending anything. */
+inboxRouter.post('/assistant/test', rateLimit('assistant-test', 30, 10 * 60 * 1000), async (req, res) => {
+  const business = loadBusiness(req.session!.businessId);
+  const question = String(req.body.question ?? '').trim().slice(0, 1000);
+  if (!question) return res.status(400).json({ error: 'Type a question to try' });
+  if (!aiConfigured()) return res.status(400).json({ error: 'Add ANTHROPIC_API_KEY under Integrations → Server keys first' });
+  try {
+    const decision = await decide(business, 'Test customer', [{ direction: 'in', body: question, automated: 0 }]);
+    const holding = business.hours_enabled && !isOpen(business) ? business.away_message : business.assistant_handoff;
+    res.json({ action: decision.action, reply: decision.action === 'answer' ? decision.reply : holding });
+  } catch (err) {
+    console.error('Assistant test failed:', err);
+    res.status(502).json({ error: 'The AI service had a problem. Check the Anthropic key, then try again.' });
   }
 });
 
@@ -473,10 +560,11 @@ inboxRouter.get('/conversations', (req, res) => {
   const tagIds = (typeof req.query.tags === 'string' ? req.query.tags.split(',') : []).map((t) => t.trim()).filter(Boolean).slice(0, 10);
   const tagFilter = tagIds.map(() => ' AND EXISTS (SELECT 1 FROM conversation_tags x WHERE x.conversation_id = c.id AND x.tag_id = ?)').join('');
 
-  const rows = all<Conversation & { contact_name: string; contact_phone: string | null; last_body: string | null; last_direction: string | null; business_name: string; business_color: string }>(
+  const rows = all<Conversation & { contact_name: string; contact_phone: string | null; last_body: string | null; last_direction: string | null; last_automated: number | null; business_name: string; business_color: string }>(
     `SELECT c.*, ct.name AS contact_name, ct.phone AS contact_phone, b.name AS business_name, b.color AS business_color,
             (SELECT body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_body,
-            (SELECT direction FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_direction
+            (SELECT direction FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_direction,
+            (SELECT automated FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_automated
        FROM conversations c JOIN contacts ct ON ct.id = c.contact_id JOIN businesses b ON b.id = c.business_id
       WHERE c.business_id IN (${placeholders}) AND c.status = ?
         AND (? = '' OR ct.name LIKE ? OR ct.phone LIKE ? OR ct.email LIKE ?)${tagFilter}
@@ -495,6 +583,7 @@ inboxRouter.get('/conversations', (req, res) => {
       lastMessageAt: r.last_message_at,
       lastMessage: r.last_body,
       lastDirection: r.last_direction,
+      lastAutomated: r.last_automated ?? 0,
       contactName: r.contact_name,
       contactPhone: r.contact_phone,
       businessId: r.business_id,
@@ -540,6 +629,7 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       replyChannels: replyChannels(loadBusiness(businessId), conversation, contact),
       defaultChannel: defaultChannel(loadBusiness(businessId), conversation, contact),
       tags: tagsByConversation([conversation.id]).get(conversation.id) ?? [],
+      assistantPaused: Boolean(conversation.assistant_paused),
     },
     messages: loadMessages(conversation.id),
   });
@@ -559,6 +649,8 @@ inboxRouter.post('/conversations/:id/messages', async (req, res) => {
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
   try {
     const message = await sendToCustomer(loadBusiness(businessId), conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
+    // A person has taken over: the assistant stays quiet here from now on (it can be switched back on).
+    run('UPDATE conversations SET assistant_paused = 1 WHERE id = ?', conversation.id);
     res.status(201).json({ message });
   } catch (err) {
     if (err instanceof DeliveryError) return res.status(err.message.includes('not sent') ? 502 : 400).json({ error: err.message });
@@ -699,6 +791,10 @@ inboxRouter.patch('/conversations/:id', (req, res) => {
   const { businessId } = req.session!;
   const conversation = loadConversation(businessId, req.params.id);
   if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+  if (req.body.assistantPaused !== undefined) {
+    run('UPDATE conversations SET assistant_paused = ? WHERE id = ?', req.body.assistantPaused ? 1 : 0, conversation.id);
+    if (req.body.status === undefined) return res.json({ ok: true });
+  }
   const status = req.body.status;
   if (status !== 'open' && status !== 'closed') return res.status(400).json({ error: 'Status must be open or closed' });
   run('UPDATE conversations SET status = ? WHERE id = ?', status, conversation.id);

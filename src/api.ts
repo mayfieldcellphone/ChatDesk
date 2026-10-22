@@ -42,6 +42,10 @@ export interface Business {
   /** Private address a website's own server posts its forms (bookings, quotes) to. */
   leadsUrl: string;
   /** Automatic confirmation to customers who book on the website. */
+  /** When the AI assistant answers customers on its own. */
+  assistantMode: 'off' | 'always' | 'after_hours' | 'no_reply';
+  /** Sent when the assistant can't answer from the FAQs (outside opening hours the away message is used). */
+  assistantHandoff: string;
   bookingReplyEnabled: boolean;
   bookingReplyText: string;
 }
@@ -87,6 +91,8 @@ export interface ConversationSummary {
   lastMessageAt: string;
   lastMessage: string | null;
   lastDirection: 'in' | 'out' | null;
+  /** 1 = automatic message, 2 = written by the AI assistant. */
+  lastAutomated: number;
   contactName: string;
   contactPhone: string | null;
   businessId: string;
@@ -119,6 +125,17 @@ export interface ConversationDetail {
   replyChannels: Channel[];
   defaultChannel: Channel | null;
   tags: Tag[];
+  /** The assistant stays out of this conversation (staff replied, or it was paused). */
+  assistantPaused: boolean;
+}
+
+/** A question and answer the AI assistant may use. */
+export interface Faq {
+  id: string;
+  question: string;
+  answer: string;
+  /** Still has a template gap such as "[Business hours]"; the assistant skips it until edited. */
+  needsEditing: boolean;
 }
 
 /** An internal, colour-coded label on conversations. Customers never see tags. */
