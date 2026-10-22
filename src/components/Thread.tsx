@@ -176,7 +176,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
     const assistantPaused = !conversation.assistantPaused;
     try {
       await api(`/conversations/${conversation.id}`, { method: 'PATCH', body: { assistantPaused } });
-      setConversation({ ...conversation, assistantPaused, assistantPausedByReply: false });
+      setConversation({ ...conversation, assistantPaused });
     } catch (err) {
       setError((err as Error).message);
     }
@@ -311,13 +311,11 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
             className={`shrink-0 rounded-md border px-3 py-1.5 text-sm ${conversation.assistantPaused ? 'border-slate-300 text-slate-500' : 'border-violet-300 bg-violet-50 text-violet-700'}`}
             title={
               !conversation.assistantPaused
-                ? 'The assistant answers this customer instantly from your FAQs. Click to pause it here.'
-                : conversation.assistantPausedByReply
-                  ? 'You replied, so the assistant leaves this to you until 30 minutes after your last message. Click to switch it back on now.'
-                  : 'Paused in this conversation. Click to switch it back on.'
+                ? 'The assistant answers this customer instantly from your FAQs, even after you reply. Click to pause it here.'
+                : 'Paused in this conversation. Click to switch it back on.'
             }
           >
-            🤖 {!conversation.assistantPaused ? 'Assistant on' : conversation.assistantPausedByReply ? 'Assistant waiting (you replied)' : 'Assistant paused'}
+            🤖 {conversation.assistantPaused ? 'Assistant paused' : 'Assistant on'}
           </button>
         )}
         <button

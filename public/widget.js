@@ -128,6 +128,12 @@
   }
 
   function toggle(open) {
+    if (state.config && hasMenu()) {
+      // Closing goes back to the menu, where "Continue your conversation" keeps their chat. A reply that
+      // came in while it was closed opens straight on the chat.
+      if (open && unseen > 0 && state.session) renderThread();
+      else if (!open && state.view !== 'menu') renderMenu();
+    }
     state.open = open;
     panel.classList.toggle('open', open);
     launcher.innerHTML = open ? CLOSE_ICON : CHAT_ICON;
@@ -425,7 +431,9 @@
     request('GET', '/conversations/' + state.session.conversationId + '/messages')
       .then(function (data) {
         state.messages = data.messages;
-        renderThread();
+        // With a menu they start there; "Continue your conversation" is at the top.
+        if (hasMenu()) renderMenu();
+        else renderThread();
         connect();
       })
       .catch(function () { reset(); });

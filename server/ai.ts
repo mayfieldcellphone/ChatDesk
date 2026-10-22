@@ -55,16 +55,20 @@ ${knowledge || 'The owner has not added any business information yet, so avoid q
   return draft(system, `It is ${day} ${time} for the business (${status}).\n\n<conversation>\n${transcript}\n</conversation>\n\nDraft the business's next message.`);
 }
 
-/** One Claude call that returns a plain-text draft, with errors turned into messages staff can act on. */
-async function draft(system: string, prompt: string): Promise<string> {
-  // The key can be changed on the Integrations page, so rebuild the client when it does.
+/** The shared Anthropic client. The key can be changed on the Integrations page, so it's rebuilt when it does. */
+export function anthropic() {
   const apiKey = config('ANTHROPIC_API_KEY');
   if (!client || clientKey !== apiKey) {
     client = new Anthropic({ apiKey });
     clientKey = apiKey;
   }
+  return client;
+}
+
+/** One Claude call that returns a plain-text draft, with errors turned into messages staff can act on. */
+async function draft(system: string, prompt: string): Promise<string> {
   try {
-    const response = await client.beta.messages.create({
+    const response = await anthropic().beta.messages.create({
       model: MODEL,
       max_tokens: 4000,
       output_config: { effort: 'low' },

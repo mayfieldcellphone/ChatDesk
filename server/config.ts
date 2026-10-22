@@ -37,7 +37,7 @@ const listeners: (() => void)[] = [];
 /** Runs when a saved key changes, e.g. to rebuild the email connection. */
 export const onConfigChange = (fn: () => void) => listeners.push(fn);
 
-export function config(name: ManagedKey | 'ANTHROPIC_MODEL' | 'OPENAI_TRANSCRIBE_MODEL'): string | undefined {
+export function config(name: ManagedKey | 'ANTHROPIC_MODEL' | 'ASSISTANT_MODEL' | 'OPENAI_TRANSCRIBE_MODEL'): string | undefined {
   return process.env[name] || saved.get(name) || undefined;
 }
 

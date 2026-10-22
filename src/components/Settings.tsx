@@ -698,7 +698,7 @@ function AssistantSection({ business, onSaved }: Props) {
         title="AI assistant"
         description="Answers customers in web chat and texts on its own, using only your FAQs and AI notes. If the answer isn’t there, it sends your holding message and tags the conversation “Needs reply”. You can step in any time: after you reply, it leaves that conversation to you until 30 minutes after your last message."
       >
-        {!business.aiAvailable && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">Needs ANTHROPIC_API_KEY under Integrations → Server keys.</p>}
+        {!business.aiAvailable && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">No Anthropic key yet, so every question gets the holding message below. Add ANTHROPIC_API_KEY under Integrations → Server keys for real answers.</p>}
         <div className="space-y-2">
           {ASSISTANT_MODES.map((m) => (
             <label key={m.value} className="flex cursor-pointer items-start gap-2 text-sm">

@@ -1,6 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { all, get, newId, now, run, type Business, type Contact, type Conversation, type Faq, type Message } from './db';
-import { aiConfigured } from './ai';
+import { aiConfigured, anthropic } from './ai';
 import { config } from './config';
 import { publish } from './events';
 import { isOpen, localTime } from './hours';
@@ -9,14 +8,14 @@ import { defaultChannel, replyChannels, sendToCustomer } from './outbound';
 /**
  * The AI assistant: answers customers on its own from the business's FAQs and notes, and hands over
  * to the team (a holding message plus a "Needs reply" tag) when the answer isn't there. When it may
- * answer is the business's assistant_mode; staff replying in a conversation pauses it there.
+ * answer is the business's assistant_mode. Without an Anthropic key it still sends the holding message.
  */
 
 const NO_REPLY_WAIT_MS = Number(process.env.ASSISTANT_NO_REPLY_MS) || 2 * 60 * 1000;
 // Several quick messages in a row get one answer.
 const SETTLE_MS = Number(process.env.ASSISTANT_SETTLE_MS) || 1500;
-// After staff reply in a conversation, the assistant leaves it to them for this long.
-const STAFF_PAUSE_MS = Number(process.env.ASSISTANT_STAFF_PAUSE_MS) || 30 * 60 * 1000;
+// Past this the customer gets the holding message instead of waiting longer.
+const AI_TIMEOUT_MS = Number(process.env.ASSISTANT_AI_TIMEOUT_MS) || 25_000;
 const MAX_REPLIES_PER_HOUR = 8;
 const NEEDS_REPLY_TAG = { name: 'Needs reply', color: '#dc2626' };
 
@@ -71,22 +70,25 @@ ${knowledge || 'No FAQs or notes have been added, so hand off anything beyond a 
     .map((m) => `${m.direction === 'in' ? `Customer (${contactName})` : m.automated === 2 ? 'Assistant' : m.automated ? 'Business (automatic message)' : 'Business staff'}: ${m.body}`)
     .join('\n');
 
-  const model = config('ANTHROPIC_MODEL') || 'claude-opus-5-5';
+  const model = config('ASSISTANT_MODEL') || config('ANTHROPIC_MODEL') || 'claude-opus-5-5';
   const fallback = ['claude-fable-5-1', 'claude-opus-5-5', 'claude-opus-5', 'claude-sonnet-5-5'].includes(model);
-  const client = new Anthropic({ apiKey: config('ANTHROPIC_API_KEY') });
-  const response = await client.beta.messages.create({
-    model,
-    max_tokens: 2000,
-    output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
-    ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
-    system,
-    messages: [
-      {
-        role: 'user',
-        content: `It is ${day} ${time} for the business (${status}).\n\n<conversation>\n${transcript}\n</conversation>\n\nDecide the business's next message.`,
-      },
-    ],
-  });
+  const response = await anthropic().beta.messages.create(
+    {
+      model,
+      max_tokens: 2000,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+      ...(fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+      // The FAQs are the same on every call, so cache them: later answers come back faster and cheaper.
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      messages: [
+        {
+          role: 'user',
+          content: `It is ${day} ${time} for the business (${status}).\n\n<conversation>\n${transcript}\n</conversation>\n\nDecide the business's next message.`,
+        },
+      ],
+    },
+    { timeout: AI_TIMEOUT_MS, maxRetries: 1 },
+  );
   if (response.stop_reason === 'refusal') return { action: 'handoff', reply: '' };
   const text = response.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
   const parsed = JSON.parse(text) as Decision;
@@ -94,24 +96,18 @@ ${knowledge || 'No FAQs or notes have been added, so hand off anything beyond a 
   return parsed.action === 'answer' && reply ? { action: 'answer', reply } : { action: 'handoff', reply: '' };
 }
 
-/**
- * Is the assistant staying out of this conversation? assistant_paused is 1 when someone paused it
- * (until they switch it back on) and 2 when staff replied (until 30 minutes after their last message).
- */
+/** Has someone paused the assistant in this conversation (the 🤖 button)? It stays paused until switched back on. */
 export function assistantPausedNow(conversationId: string) {
-  const paused = get<{ assistant_paused: number }>('SELECT assistant_paused FROM conversations WHERE id = ?', conversationId)?.assistant_paused ?? 0;
-  if (paused !== 2) return paused === 1;
-  const lastStaff = get<{ created_at: string }>(
-    "SELECT created_at FROM messages WHERE conversation_id = ? AND direction = 'out' AND automated = 0 ORDER BY created_at DESC LIMIT 1",
-    conversationId,
-  );
-  return Boolean(lastStaff && Date.now() - Date.parse(lastStaff.created_at) < STAFF_PAUSE_MS);
+  return get<{ assistant_paused: number }>('SELECT assistant_paused FROM conversations WHERE id = ?', conversationId)?.assistant_paused === 1;
 }
 
 /** Does the assistant reply to this customer message now, later, or not at all? */
 function plan(business: Business, conversation: Conversation): 'now' | 'later' | null {
-  if (business.assistant_mode === 'off' || !aiConfigured()) return null;
-  if (assistantPausedNow(conversation.id)) return null;
+  if (business.assistant_mode === 'off') return null;
+  if (assistantPausedNow(conversation.id)) {
+    console.log(`Assistant (${business.name}): paused in this conversation, not replying`);
+    return null;
+  }
   if (business.assistant_mode === 'always') return 'now';
   if (business.assistant_mode === 'after_hours') return business.hours_enabled && !isOpen(business) ? 'now' : null;
   return 'later';
@@ -122,7 +118,11 @@ function plan(business: Business, conversation: Conversation): 'now' | 'later' |
  * so the away message isn't sent as well.
  */
 export function assistantTakesMessage(business: Business, conversation: Conversation, message: Message) {
-  if (message.direction !== 'in' || message.kind !== 'text') return false;
+  if (message.direction !== 'in') return false;
+  if (message.kind !== 'text') {
+    if (business.assistant_mode !== 'off') console.log(`Assistant (${business.name}): leaving the ${message.kind} to you`);
+    return false;
+  }
   const when = plan(business, conversation);
   if (!when) return false;
   setTimeout(() => {
@@ -149,10 +149,17 @@ async function handle(businessId: string, conversationId: string, messageId: str
   const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
   const channels = replyChannels(business, conversation, contact);
   const channel = channels.includes(conversation.channel) ? conversation.channel : defaultChannel(business, conversation, contact);
-  if (!channel || channel === 'email') return;
+  if (!channel || channel === 'email') {
+    console.log(`Assistant (${business.name}): no chat or text channel to reply on`);
+    return;
+  }
 
   let decision: Decision;
+  const started = Date.now();
   if (recent >= MAX_REPLIES_PER_HOUR) {
+    decision = { action: 'handoff', reply: '' };
+  } else if (!aiConfigured()) {
+    console.log(`Assistant (${business.name}): no Anthropic key, sending the holding message`);
     decision = { action: 'handoff', reply: '' };
   } else {
     try {
@@ -163,6 +170,7 @@ async function handle(businessId: string, conversationId: string, messageId: str
       decision = { action: 'handoff', reply: '' };
     }
   }
+  console.log(`Assistant (${business.name}): ${decision.action === 'answer' ? 'answered' : 'handed over'} by ${channel} in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 
   if (decision.action === 'answer') {
     await sendToCustomer(business, conversation, channel, decision.reply, { assistant: true });

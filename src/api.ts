@@ -128,7 +128,6 @@ export interface ConversationDetail {
   /** The assistant is staying out of this conversation right now. */
   assistantPaused: boolean;
   /** …because staff replied: it answers again 30 minutes after their last message. */
-  assistantPausedByReply: boolean;
 }
 
 /** A question and answer the AI assistant may use. */

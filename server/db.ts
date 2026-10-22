@@ -588,6 +588,8 @@ run(
 );
 // Set when staff reply in a conversation (or pause it), so the assistant never talks over them.
 addColumn('conversations', 'assistant_paused', 'INTEGER NOT NULL DEFAULT 0');
+// Staff replies used to pause the assistant for 30 minutes (2); now only the 🤖 button pauses it.
+run('UPDATE conversations SET assistant_paused = 0 WHERE assistant_paused = 2');
 
 export interface Faq {
   id: string;

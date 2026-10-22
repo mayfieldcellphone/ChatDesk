@@ -399,7 +399,8 @@ inboxRouter.post('/assistant/test', rateLimit('assistant-test', 30, 10 * 60 * 10
   const business = loadBusiness(req.session!.businessId);
   const question = String(req.body.question ?? '').trim().slice(0, 1000);
   if (!question) return res.status(400).json({ error: 'Type a question to try' });
-  if (!aiConfigured()) return res.status(400).json({ error: 'Add ANTHROPIC_API_KEY under Integrations → Server keys first' });
+  // Without a key every customer gets the holding message, so show that.
+  if (!aiConfigured()) return res.json({ action: 'handoff', reply: business.assistant_handoff });
   try {
     const decision = await decide(business, 'Test customer', [{ direction: 'in', body: question, automated: 0 }]);
     res.json({ action: decision.action, reply: decision.action === 'answer' ? decision.reply : business.assistant_handoff });
@@ -629,8 +630,6 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       defaultChannel: defaultChannel(loadBusiness(businessId), conversation, contact),
       tags: tagsByConversation([conversation.id]).get(conversation.id) ?? [],
       assistantPaused: assistantPausedNow(conversation.id),
-      // Paused because staff replied (it comes back by itself) rather than switched off here.
-      assistantPausedByReply: conversation.assistant_paused === 2,
     },
     messages: loadMessages(conversation.id),
   });
@@ -650,9 +649,6 @@ inboxRouter.post('/conversations/:id/messages', async (req, res) => {
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
   try {
     const message = await sendToCustomer(loadBusiness(businessId), conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
-    // A person has stepped in: the assistant leaves this conversation to them for 30 minutes after
-    // their last message. A manual pause (1) stays as it is.
-    run('UPDATE conversations SET assistant_paused = 2 WHERE id = ? AND assistant_paused != 1', conversation.id);
     res.status(201).json({ message });
   } catch (err) {
     if (err instanceof DeliveryError) return res.status(err.message.includes('not sent') ? 502 : 400).json({ error: err.message });
