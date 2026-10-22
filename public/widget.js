@@ -17,7 +17,7 @@
   var api = base + '/api/widget/' + encodeURIComponent(key);
   var storeKey = 'chatdesk:' + key;
 
-  var state = { config: null, session: null, messages: [], open: false, stream: null };
+  var state = { config: null, session: null, messages: [], open: false, stream: null, view: null };
 
   function loadSession() {
     try { return JSON.parse(localStorage.getItem(storeKey) || 'null'); } catch (e) { return null; }
@@ -196,11 +196,19 @@
   }
 
   function renderMenu() {
+    state.view = 'menu';
     composer.classList.add('hidden');
     bodyEl.innerHTML = '';
     var o = state.config.options || {};
     var menu = el('div', 'menu');
-    var items = [['chat', '💬', 'Chat with us', 'Send a message, we’ll reply here or by text']];
+    // Someone who already wrote to us can go back to that conversation, or start something new.
+    if (state.session) {
+      var last = state.messages[state.messages.length - 1];
+      var cont = option('💬', 'Continue your conversation', last ? last.body.replace(/\s+/g, ' ').slice(0, 60) : 'See our replies');
+      cont.addEventListener('click', function () { renderThread(); });
+      menu.appendChild(cont);
+    }
+    var items = state.session ? [] : [['chat', '💬', 'Chat with us', 'Send a message, we’ll reply here or by text']];
     if (o.quote) items.push(['quote', '📋', 'Get a quote', 'Tell us the device and what’s wrong']);
     if (o.callback) items.push(['callback', '📞', 'Request a call back', 'We’ll ring you at a time that suits']);
     items.forEach(function (item) {
@@ -220,6 +228,7 @@
 
   function renderForm(kind) {
     var spec = FORMS[kind];
+    state.view = 'form';
     composer.classList.add('hidden');
     bodyEl.innerHTML = '';
     var form = el('form', 'start');
@@ -302,9 +311,18 @@
   };
 
   function renderThread(kind) {
+    state.view = 'thread';
     composer.classList.remove('hidden');
     bodyEl.innerHTML = '';
+    if (hasMenu()) {
+      // Back to the menu: get a quote, ask for a call back or call us, without losing this chat.
+      var back = el('button', 'back', '← Menu');
+      back.type = 'button';
+      back.addEventListener('click', renderMenu);
+      bodyEl.appendChild(back);
+    }
     bodyEl.appendChild(el('p', 'note', THANKS[kind] || 'We’ll reply here. If you leave, we can text you back.'));
+    if (state.open) setBadge(0);
     state.messages.forEach(appendMessageEl);
     bodyEl.scrollTop = bodyEl.scrollHeight;
   }
@@ -318,9 +336,12 @@
   function addMessage(m) {
     for (var i = 0; i < state.messages.length; i++) if (state.messages[i].id === m.id) return;
     state.messages.push(m);
-    appendMessageEl(m);
-    bodyEl.scrollTop = bodyEl.scrollHeight;
-    if (m.direction === 'out' && !state.open) setBadge(unseen + 1);
+    if (state.view === 'thread') {
+      appendMessageEl(m);
+      bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+    // A reply while they're looking elsewhere (closed, or on the menu) shows on the badge.
+    if (m.direction === 'out' && (!state.open || state.view !== 'thread')) setBadge(unseen + 1);
   }
 
   composer.addEventListener('submit', function (e) {
