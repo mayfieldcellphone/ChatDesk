@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, CHANNEL_LABELS, fillReply, type Business, type Channel, type ConversationDetail, type InboxEvent, type Message, type SavedReply } from '../api';
+import { api, CHANNEL_LABELS, fillReply, type Business, type Channel, type ConversationDetail, type InboxEvent, type Message, type SavedReply, type Tag } from '../api';
+import { TagMenu, TagPill } from './Tags';
 
 interface Props {
   conversationId: string;
@@ -49,6 +50,11 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   }, [conversationId]);
 
   useEffect(() => {
+    // Tag changes: this conversation's, or a tag renamed/recoloured/deleted in Settings.
+    if (lastEvent?.type === 'tags' && (!lastEvent.conversationId || lastEvent.conversationId === conversationId)) {
+      load().catch(console.error);
+      return;
+    }
     if (!lastEvent || lastEvent.conversationId !== conversationId) return;
     if (lastEvent.type === 'message-updated') {
       setMessages((list) => list.map((m) => (m.id === lastEvent.message.id ? { ...m, ...lastEvent.message, author_name: m.author_name } : m)));
@@ -157,6 +163,19 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
     }
   };
 
+  const setTags = (tags: Tag[]) => {
+    setConversation((c) => (c ? { ...c, tags } : c));
+    onChanged();
+  };
+  const removeTag = async (tag: Tag) => {
+    try {
+      const d = await api<{ tags: Tag[] }>(`/conversations/${conversationId}/tags/${tag.id}`, { method: 'DELETE' });
+      setTags(d.tags);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const requestReview = async () => {
     setError('');
     if (!business.reviewLinkEffective) {
@@ -248,6 +267,13 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
                 </a>
               </>
             )}
+          </div>
+          {/* Internal tags: only the team sees these. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            {conversation.tags.map((t) => (
+              <TagPill key={t.id} tag={t} onRemove={() => removeTag(t)} />
+            ))}
+            <TagMenu conversationId={conversation.id} current={conversation.tags} onChange={setTags} />
           </div>
         </div>
         {contact.phone && business.smsAvailable && business.smsNumber && (

@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'node:crypto';
-import { get, newId, now, run, type Business } from './db';
+import { get, newId, now, run, seedTags, type Business } from './db';
 import { rateLimit } from './rateLimit';
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -108,6 +108,7 @@ authRouter.post('/signup', async (req, res) => {
     userId, businessId, name, email, hash, now(),
   );
   run('INSERT INTO memberships (user_id, business_id, created_at) VALUES (?, ?, ?)', userId, businessId, now());
+  seedTags(businessId);
 
   setSession(res, { userId, businessId });
   res.status(201).json({ ok: true });
@@ -144,6 +145,7 @@ export function createBusiness(userId: string, name: string, website: string | n
     businessId, name, crypto.randomBytes(12).toString('base64url'), website, PALETTE[count % PALETTE.length], now(),
   );
   run('INSERT INTO memberships (user_id, business_id, created_at) VALUES (?, ?, ?)', userId, businessId, now());
+  seedTags(businessId);
   return businessId;
 }
 

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, CHANNEL_LABELS, timeAgo, type Business, type BusinessSummary, type ConversationSummary, type InboxEvent } from '../api';
+import { api, CHANNEL_LABELS, timeAgo, type Business, type BusinessSummary, type ConversationSummary, type InboxEvent, type Tag } from '../api';
 import { playChime, showDesktopAlert } from '../alerts';
 import { usePush } from '../push';
 import Thread from './Thread';
+import { TagFilter, TagPill } from './Tags';
 
 interface Props {
   business: Business;
@@ -21,6 +22,9 @@ export default function Inbox({ business, businesses, initialConversationId, onS
   const [scope, setScope] = useState<'all' | 'current'>(multi ? 'all' : 'current');
   const [status, setStatus] = useState<'open' | 'closed'>('open');
   const [query, setQuery] = useState('');
+  // Tag filter: the selected business's tags; conversations must have every ticked one.
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(initialConversationId);
   const [lastEvent, setLastEvent] = useState<InboxEvent | null>(null);
@@ -29,10 +33,27 @@ export default function Inbox({ business, businesses, initialConversationId, onS
 
   const loadList = useCallback(() => {
     const params = new URLSearchParams({ status, q: query, scope: multi ? scope : 'current' });
+    if (tagFilter.length) params.set('tags', tagFilter.join(','));
     api<{ conversations: ConversationSummary[] }>(`/conversations?${params}`)
       .then((d) => setConversations(d.conversations))
       .catch(console.error);
-  }, [status, query, scope, multi, business.id]);
+  }, [status, query, scope, multi, business.id, tagFilter]);
+
+  const loadTags = useCallback(() => {
+    api<{ tags: Tag[] }>('/tags')
+      .then((d) => {
+        setTags(d.tags);
+        // Drop ticks for tags that were deleted.
+        setTagFilter((f) => (f.every((id) => d.tags.some((t) => t.id === id)) ? f : f.filter((id) => d.tags.some((t) => t.id === id))));
+      })
+      .catch(console.error);
+  }, [business.id]);
+  useEffect(() => {
+    setTagFilter([]);
+    loadTags();
+  }, [loadTags]);
+  const loadTagsRef = useRef(loadTags);
+  loadTagsRef.current = loadTags;
 
   // Conversations belong to a business; open that business first so replies and settings match.
   const open = async (c: ConversationSummary) => {
@@ -81,6 +102,7 @@ export default function Inbox({ business, businesses, initialConversationId, onS
       setLastEvent(event);
       activityRef.current();
       if (event.type === 'message') alertNewMessage(event);
+      if (event.type === 'tags' && !event.conversationId) loadTagsRef.current();
       if (event.type === 'presence') {
         setConversations((list) => list.map((c) => (c.id === event.conversationId ? { ...c, online: event.online } : c)));
       } else {
@@ -136,17 +158,22 @@ export default function Inbox({ business, businesses, initialConversationId, onS
               </button>
             ))}
           </div>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name or number"
-            className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
-          />
+          <div className="flex gap-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search name or number"
+              className="min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+            />
+            <TagFilter tags={tags} selected={tagFilter} onChange={setTagFilter} />
+          </div>
         </div>
         <ul className="flex-1 overflow-y-auto">
           {conversations.length === 0 && (
             <li className="p-6 text-center text-sm text-slate-500">
-              {status === 'open' ? (
+              {tagFilter.length > 0 || query ? (
+                'No conversations match.'
+              ) : status === 'open' ? (
                 <>
                   No open conversations.{' '}
                   <button onClick={onOpenSettings} className="text-blue-600 hover:underline">
@@ -190,6 +217,14 @@ export default function Inbox({ business, businesses, initialConversationId, onS
                     <span className="shrink-0 rounded-full bg-blue-600 px-1.5 text-[10px] font-bold text-white">{c.unreadCount}</span>
                   )}
                 </div>
+                {c.tags.length > 0 && (
+                  <div className="mt-1 flex items-center gap-1 overflow-hidden">
+                    {c.tags.slice(0, 2).map((t) => (
+                      <TagPill key={t.id} tag={t} />
+                    ))}
+                    {c.tags.length > 2 && <span className="shrink-0 text-[11px] text-slate-500">+{c.tags.length - 2}</span>}
+                  </div>
+                )}
               </button>
             </li>
           ))}

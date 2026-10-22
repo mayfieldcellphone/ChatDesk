@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import WebsiteImport from './WebsiteImport';
+import { ColorChoices, TagPill } from './Tags';
 import PushControls from './PushControls';
-import { api, DAYS, type Business, type Day, type SavedReply, type WeeklyHours } from '../api';
+import { api, DAYS, TAG_COLORS, type Business, type Day, type SavedReply, type Tag, type WeeklyHours } from '../api';
 
 interface Props {
   business: Business;
@@ -77,6 +78,7 @@ export default function Settings(props: Props & { autoImport?: boolean }) {
           <HoursSection {...props} />
           <PhoneSection {...props} />
           <SavedRepliesSection />
+          <TagsSection />
           <AiSection {...props} />
           <NotificationsSection {...props} />
         </div>
@@ -472,6 +474,104 @@ function SavedRepliesSection() {
         <button onClick={() => setEditing({ id: null, title: '', body: '' })} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">
           + Add saved reply
         </button>
+      )}
+    </Card>
+  );
+}
+
+/** Create, rename, recolour and delete the business's internal tags. */
+function TagsSection() {
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [editing, setEditing] = useState<{ id: string | null; name: string; color: string } | null>(null);
+  const [status, setStatus] = useState<Status>(null);
+
+  const load = () => api<{ tags: Tag[] }>('/tags').then((d) => setTags(d.tags)).catch((err) => setStatus({ ok: false, text: err.message }));
+  useEffect(() => {
+    load();
+  }, []);
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setStatus(null);
+    try {
+      const body = { name: editing.name, color: editing.color };
+      if (editing.id) await api(`/tags/${editing.id}`, { method: 'PATCH', body });
+      else await api('/tags', { method: 'POST', body });
+      setEditing(null);
+      setStatus({ ok: true, text: 'Saved' });
+      load();
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message });
+    }
+  };
+
+  const remove = async (tag: Tag) => {
+    const where = tag.uses ? ` It will be removed from ${tag.uses} conversation${tag.uses === 1 ? '' : 's'}.` : '';
+    if (!confirm(`Delete the tag “${tag.name}”?${where}`)) return;
+    setStatus(null);
+    try {
+      await api(`/tags/${tag.id}`, { method: 'DELETE' });
+      if (editing?.id === tag.id) setEditing(null);
+      setStatus({ ok: true, text: 'Deleted' });
+      load();
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message });
+    }
+  };
+
+  const form = editing && (
+    <form onSubmit={save} className="space-y-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <input
+        autoFocus
+        maxLength={30}
+        className={input}
+        placeholder="Tag name"
+        value={editing.name}
+        onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+        required
+      />
+      <ColorChoices value={editing.color} onChange={(color) => setEditing({ ...editing, color })} />
+      <div className="flex flex-wrap items-center gap-3">
+        {editing.name.trim() && <TagPill tag={{ id: 'preview', name: editing.name.trim(), color: editing.color }} />}
+        <button className={primary}>{editing.id ? 'Save tag' : 'Create tag'}</button>
+        <button type="button" onClick={() => setEditing(null)} className="text-sm text-slate-500 hover:underline">
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+
+  return (
+    <Card title="Tags" description="Colour-coded labels for your team, e.g. “Waiting on parts”. Customers never see them. Add them to a conversation with “+ Tag”.">
+      <ul className="divide-y divide-slate-100 rounded-md border border-slate-200">
+        {tags.length === 0 && <li className="px-3 py-2 text-sm text-slate-400">No tags yet.</li>}
+        {tags.map((t) =>
+          editing?.id === t.id ? (
+            <li key={t.id} className="p-2">{form}</li>
+          ) : (
+            <li key={t.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
+              <TagPill tag={t} />
+              <span className="text-xs text-slate-400">{t.uses ? `${t.uses} conversation${t.uses === 1 ? '' : 's'}` : 'not used yet'}</span>
+              <span className="ml-auto flex gap-3">
+                <button onClick={() => setEditing({ id: t.id, name: t.name, color: t.color })} className="text-blue-600 hover:underline">
+                  Edit
+                </button>
+                <button onClick={() => remove(t)} className="text-red-600 hover:underline">
+                  Delete
+                </button>
+              </span>
+            </li>
+          ),
+        )}
+      </ul>
+      {editing?.id === null ? form : (
+        <div className="flex items-center gap-3">
+          <button onClick={() => setEditing({ id: null, name: '', color: TAG_COLORS[0] })} className="text-sm font-medium text-blue-600 hover:underline">
+            + New tag
+          </button>
+          <StatusText status={status} />
+        </div>
       )}
     </Card>
   );

@@ -1,8 +1,8 @@
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { Readable } from 'node:stream';
 import {
   all, get, insertMessage, newId, normalizePhone, now, run,
-  type Business, type Channel, type Contact, type Conversation, type Message, type SavedReply,
+  type Business, type Channel, type Contact, type Conversation, type Message, type SavedReply, type Tag,
 } from './db';
 import { isVisitorOnline, publish, subscribe } from './events';
 import { requireAuth } from './auth';
@@ -305,6 +305,99 @@ inboxRouter.post('/business/repairbill/test', async (req, res) => {
   }
 });
 
+// ---------- Tags ----------
+// Internal labels for the team. Only these logged-in routes ever read them; nothing customer-facing does.
+
+const publicTag = (t: Pick<Tag, 'id' | 'name' | 'color'>) => ({ id: t.id, name: t.name, color: t.color });
+
+/** Each conversation's tags, alphabetical. */
+function tagsByConversation(conversationIds: string[]) {
+  const map = new Map<string, ReturnType<typeof publicTag>[]>();
+  if (conversationIds.length === 0) return map;
+  const rows = all<Tag & { conversation_id: string }>(
+    `SELECT t.*, x.conversation_id FROM conversation_tags x JOIN tags t ON t.id = x.tag_id
+      WHERE x.conversation_id IN (${conversationIds.map(() => '?').join(', ')}) ORDER BY t.name COLLATE NOCASE`,
+    ...conversationIds,
+  );
+  for (const r of rows) map.set(r.conversation_id, [...(map.get(r.conversation_id) ?? []), publicTag(r)]);
+  return map;
+}
+
+const loadTag = (businessId: string, id: string) => get<Tag>('SELECT * FROM tags WHERE id = ? AND business_id = ?', id, businessId);
+
+/** Validates a tag's name and colour; missing fields keep the current tag's values. */
+function readTag(body: Record<string, unknown>, businessId: string, current?: Tag) {
+  const name = body.name === undefined && current ? current.name : String(body.name ?? '').trim().replace(/\s+/g, ' ');
+  const color = body.color === undefined && current ? current.color : String(body.color ?? '').trim().toLowerCase();
+  if (!name) return { error: 'Give the tag a name' };
+  if (name.length > 30) return { error: 'Tag names can be up to 30 characters' };
+  if (!HEX_COLOR.test(color)) return { error: 'Colour must be a hex value like #2563eb' };
+  const clash = get<{ id: string }>('SELECT id FROM tags WHERE business_id = ? AND name = ? COLLATE NOCASE AND id != ?', businessId, name, current?.id ?? '');
+  if (clash) return { error: `There's already a tag called “${name}”` };
+  return { name, color };
+}
+
+inboxRouter.get('/tags', (req, res) => {
+  const { businessId } = req.session!;
+  const rows = all<Tag & { uses: number }>(
+    `SELECT t.*, (SELECT COUNT(*) FROM conversation_tags x WHERE x.tag_id = t.id) AS uses
+       FROM tags t WHERE t.business_id = ? ORDER BY t.name COLLATE NOCASE`,
+    businessId,
+  );
+  res.json({ tags: rows.map((t) => ({ ...publicTag(t), uses: t.uses })) });
+});
+
+inboxRouter.post('/tags', (req, res) => {
+  const { businessId } = req.session!;
+  const tag = readTag(req.body, businessId);
+  if ('error' in tag) return res.status(400).json({ error: tag.error });
+  const id = newId();
+  run('INSERT INTO tags (id, business_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)', id, businessId, tag.name, tag.color, now());
+  publish(`biz:${businessId}`, { type: 'tags' });
+  res.status(201).json({ tag: { id, ...tag, uses: 0 } });
+});
+
+inboxRouter.patch('/tags/:id', (req, res) => {
+  const { businessId } = req.session!;
+  const current = loadTag(businessId, req.params.id);
+  if (!current) return res.status(404).json({ error: 'Tag not found' });
+  const tag = readTag(req.body, businessId, current);
+  if ('error' in tag) return res.status(400).json({ error: tag.error });
+  run('UPDATE tags SET name = ?, color = ? WHERE id = ?', tag.name, tag.color, current.id);
+  publish(`biz:${businessId}`, { type: 'tags' });
+  res.json({ tag: { id: current.id, ...tag } });
+});
+
+/** Deletes the tag; it comes off every conversation with it (ON DELETE CASCADE). */
+inboxRouter.delete('/tags/:id', (req, res) => {
+  const { businessId } = req.session!;
+  const tag = loadTag(businessId, req.params.id);
+  if (!tag) return res.status(404).json({ error: 'Tag not found' });
+  const removedFrom = get<{ n: number }>('SELECT COUNT(*) AS n FROM conversation_tags WHERE tag_id = ?', tag.id)!.n;
+  run('DELETE FROM tags WHERE id = ?', tag.id);
+  publish(`biz:${businessId}`, { type: 'tags' });
+  res.json({ ok: true, removedFrom });
+});
+
+function changeConversationTag(add: boolean) {
+  return (req: Request, res: Response) => {
+    const { businessId } = req.session!;
+    const conversation = loadConversation(businessId, req.params.id);
+    const tag = loadTag(businessId, req.params.tagId);
+    if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+    if (!tag) return res.status(404).json({ error: 'Tag not found' });
+    if (add) {
+      run('INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id, created_at) VALUES (?, ?, ?)', conversation.id, tag.id, now());
+    } else {
+      run('DELETE FROM conversation_tags WHERE conversation_id = ? AND tag_id = ?', conversation.id, tag.id);
+    }
+    publish(`biz:${businessId}`, { type: 'tags', conversationId: conversation.id });
+    res.json({ tags: tagsByConversation([conversation.id]).get(conversation.id) ?? [] });
+  };
+}
+inboxRouter.put('/conversations/:id/tags/:tagId', changeConversationTag(true));
+inboxRouter.delete('/conversations/:id/tags/:tagId', changeConversationTag(false));
+
 // ---------- Saved replies ----------
 
 const publicReply = (r: SavedReply) => ({ id: r.id, title: r.title, body: r.body });
@@ -358,6 +451,9 @@ inboxRouter.get('/conversations', (req, res) => {
       ? all<{ business_id: string }>('SELECT business_id FROM memberships WHERE user_id = ?', req.session!.userId).map((m) => m.business_id)
       : [businessId];
   const placeholders = businessIds.map(() => '?').join(', ');
+  // ?tags=id1,id2 keeps conversations that have every one of those tags.
+  const tagIds = (typeof req.query.tags === 'string' ? req.query.tags.split(',') : []).map((t) => t.trim()).filter(Boolean).slice(0, 10);
+  const tagFilter = tagIds.map(() => ' AND EXISTS (SELECT 1 FROM conversation_tags x WHERE x.conversation_id = c.id AND x.tag_id = ?)').join('');
 
   const rows = all<Conversation & { contact_name: string; contact_phone: string | null; last_body: string | null; last_direction: string | null; business_name: string; business_color: string }>(
     `SELECT c.*, ct.name AS contact_name, ct.phone AS contact_phone, b.name AS business_name, b.color AS business_color,
@@ -365,11 +461,12 @@ inboxRouter.get('/conversations', (req, res) => {
             (SELECT direction FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_direction
        FROM conversations c JOIN contacts ct ON ct.id = c.contact_id JOIN businesses b ON b.id = c.business_id
       WHERE c.business_id IN (${placeholders}) AND c.status = ?
-        AND (? = '' OR ct.name LIKE ? OR ct.phone LIKE ? OR ct.email LIKE ?)
+        AND (? = '' OR ct.name LIKE ? OR ct.phone LIKE ? OR ct.email LIKE ?)${tagFilter}
       ORDER BY c.last_message_at DESC
       LIMIT 200`,
-    ...businessIds, status, q, `%${q}%`, `%${q}%`, `%${q}%`,
+    ...businessIds, status, q, `%${q}%`, `%${q}%`, `%${q}%`, ...tagIds,
   );
+  const tags = tagsByConversation(rows.map((r) => r.id));
 
   res.json({
     conversations: rows.map((r) => ({
@@ -386,6 +483,7 @@ inboxRouter.get('/conversations', (req, res) => {
       businessName: r.business_name,
       businessColor: r.business_color,
       online: isVisitorOnline(r.id),
+      tags: tags.get(r.id) ?? [],
     })),
   });
 });
@@ -423,6 +521,7 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       contact: { id: contact.id, name: contact.name, phone: contact.phone, email: contact.email },
       replyChannels: replyChannels(loadBusiness(businessId), conversation, contact),
       defaultChannel: defaultChannel(loadBusiness(businessId), conversation, contact),
+      tags: tagsByConversation([conversation.id]).get(conversation.id) ?? [],
     },
     messages: loadMessages(conversation.id),
   });

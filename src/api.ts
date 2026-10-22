@@ -88,6 +88,7 @@ export interface ConversationSummary {
   businessName: string;
   businessColor: string;
   online: boolean;
+  tags: Tag[];
 }
 
 export interface Message {
@@ -112,6 +113,30 @@ export interface ConversationDetail {
   contact: { id: string; name: string; phone: string | null; email: string | null };
   replyChannels: Channel[];
   defaultChannel: Channel | null;
+  tags: Tag[];
+}
+
+/** An internal, colour-coded label on conversations. Customers never see tags. */
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  /** How many conversations have it (only from GET /tags). */
+  uses?: number;
+}
+
+/** The colour choices offered when creating or recolouring a tag. */
+export const TAG_COLORS = ['#2563eb', '#0891b2', '#16a34a', '#65a30d', '#ca8a04', '#ea580c', '#dc2626', '#db2777', '#9333ea', '#475569'];
+
+/** White or dark text, whichever reads better on the given background colour (WCAG contrast). */
+export function tagTextColor(hex: string) {
+  const channel = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  // Contrast against white is 1.05 / (L + 0.05); against near-black (#0f172a, L≈0.009) it's (L + 0.05) / 0.059.
+  return 1.05 / (luminance + 0.05) >= (luminance + 0.05) / 0.059 ? '#ffffff' : '#0f172a';
 }
 
 /** Events pushed over /api/stream. */
@@ -123,6 +148,7 @@ export type InboxEvent = (
   | { type: 'status'; conversationId: string; status: 'open' | 'closed' }
   | { type: 'presence'; conversationId: string; online: boolean }
   | { type: 'review'; count: number; conversationId?: undefined }
+  | { type: 'tags'; conversationId?: string }
 ) & { /** Which business the event is for (the stream follows all of them). */ businessId: string };
 
 export class ApiError extends Error {

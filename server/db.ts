@@ -492,3 +492,53 @@ export function normalizePhone(input: string | undefined | null): string | null 
   }
   return /^\+\d{8,15}$/.test(e164) ? e164 : null;
 }
+
+// ---------- Tags ----------
+// Internal, colour-coded labels on conversations. Never shown to customers.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS tags_business_name ON tags(business_id, name COLLATE NOCASE);
+
+  CREATE TABLE IF NOT EXISTS conversation_tags (
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (conversation_id, tag_id)
+  );
+  CREATE INDEX IF NOT EXISTS conversation_tags_tag ON conversation_tags(tag_id);
+`);
+// Set once a business has had the starter tags, so deleted ones don't come back.
+addColumn('businesses', 'tags_seeded', 'INTEGER NOT NULL DEFAULT 0');
+
+export interface Tag {
+  id: string;
+  business_id: string;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+const STARTER_TAGS = [
+  ['New quote', '#2563eb'],
+  ['Waiting on parts', '#ea580c'],
+  ['Ready for pickup', '#16a34a'],
+  ['VIP', '#9333ea'],
+  ['Follow up', '#dc2626'],
+] as const;
+
+/** Gives a business the starter tags, once. */
+export function seedTags(businessId: string) {
+  const claimed = db.prepare('UPDATE businesses SET tags_seeded = 1 WHERE id = ? AND tags_seeded = 0').run(businessId);
+  if (!claimed.changes) return;
+  for (const [name, color] of STARTER_TAGS) {
+    run('INSERT OR IGNORE INTO tags (id, business_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)', newId(), businessId, name, color, now());
+  }
+}
+for (const b of all<{ id: string }>('SELECT id FROM businesses WHERE tags_seeded = 0')) seedTags(b.id);
