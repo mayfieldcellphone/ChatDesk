@@ -19,6 +19,7 @@ const HELP: Record<string, string> = {
   TWILIO_ACCOUNT_SID: 'Twilio Console home → Account Info (starts with AC)',
   TWILIO_AUTH_TOKEN: 'Twilio Console home → Account Info → Auth Token',
   ANTHROPIC_API_KEY: 'console.anthropic.com → API Keys (starts with sk-ant-)',
+  OPENAI_API_KEY: 'platform.openai.com → API keys (starts with sk-). Makes voicemail transcripts much more accurate',
   SMTP_HOST: 'Your email provider’s SMTP server, e.g. smtp.gmail.com',
   SMTP_PORT: 'Usually 587',
   SMTP_USER: 'Your email login',

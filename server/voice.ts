@@ -10,6 +10,7 @@ import { emailTeam } from './notify';
 import { phoneConversation } from './phone';
 import { replyChannels, sendToCustomer } from './outbound';
 import { publicUrl, twiml, verifyTwilio } from './twilio';
+import { transcribeVoicemail, transcriptionConfigured } from './transcribe';
 
 // Twilio Voice webhooks. Point the number's "A call comes in" at /api/voice/incoming and
 // "Call status changes" at /api/voice/status. The other URLs are handed to Twilio in the TwiML below.
@@ -43,7 +44,26 @@ const loadCall = (callSid: string | undefined) => (callSid ? get<Call>('SELECT *
 
 function voicemailTwiml(business: Business) {
   const base = publicUrl();
+  // With an OpenAI key, ChatBird transcribes the recording itself (see /recording), so Twilio's
+  // weaker (and separately billed) transcription is skipped.
+  if (transcriptionConfigured()) {
+    return twiml`<Say>${business.voicemail_greeting}</Say><Record maxLength="120" timeout="5" playBeep="true" trim="trim-silence" action="${base}/api/voice/voicemail-done" recordingStatusCallback="${base}/api/voice/recording"/><Say>We didn't get a message. Goodbye.</Say>`;
+  }
   return twiml`<Say>${business.voicemail_greeting}</Say><Record maxLength="120" timeout="5" playBeep="true" trim="trim-silence" action="${base}/api/voice/voicemail-done" recordingStatusCallback="${base}/api/voice/recording" transcribe="true" transcribeCallback="${base}/api/voice/transcription"/><Say>We didn't get a message. Goodbye.</Say>`;
+}
+
+/** Transcribes a voicemail with OpenAI and puts the text on its message; the audio stays either way. */
+async function transcribeInto(message: Message, business: Business) {
+  let body: string;
+  try {
+    const text = await transcribeVoicemail(message.recording_sid!, business.name);
+    body = text || '(no words detected, press play to listen)';
+  } catch (err) {
+    console.error('Voicemail transcription failed:', (err as Error).message);
+    body = '(transcript unavailable)';
+  }
+  run('UPDATE messages SET body = ? WHERE id = ?', body.slice(0, 2000), message.id);
+  publishUpdated(business.id, message.conversation_id, message.id);
 }
 
 voiceRouter.post('/incoming', (req, res) => {
@@ -115,6 +135,7 @@ voiceRouter.post('/recording', (req, res) => {
   run("UPDATE calls SET status = 'missed', has_voicemail = 1 WHERE id = ?", call.id);
   refreshCallMessage(call);
   onInboundMessage(business, conversation, message, { awayMessage: false });
+  if (transcriptionConfigured()) transcribeInto(message, business).catch((err) => console.error('Voicemail transcription failed:', err));
 });
 
 voiceRouter.post('/transcription', (req, res) => {
@@ -126,7 +147,8 @@ voiceRouter.post('/transcription', (req, res) => {
         params.RecordingSid,
       )
     : undefined;
-  if (!message) return;
+  // ChatBird's own transcript (OpenAI) wins over Twilio's, e.g. for a call that began before the key was added.
+  if (!message || transcriptionConfigured()) return;
 
   const text = (params.TranscriptionText || '').trim();
   const body = params.TranscriptionStatus === 'completed' && text ? text : 'Voicemail (no transcript available, press play to listen)';

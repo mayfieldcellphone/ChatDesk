@@ -41,6 +41,7 @@ On your own server (e.g. a Hostinger VPS) with automatic HTTPS: [docs/HOSTINGER_
 | Feature | What to set |
 | --- | --- |
 | Texting, calls & voicemail | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `PUBLIC_URL`. Step-by-step guide: [docs/TWILIO_SETUP.md](docs/TWILIO_SETUP.md) |
+| Accurate voicemail transcripts | `OPENAI_API_KEY` (OpenAI `gpt-4o-transcribe`; override with `OPENAI_TRANSCRIBE_MODEL`, e.g. `whisper-1`). ChatBird downloads each voicemail from Twilio and transcribes it with an Australian-English hint. Without the key, Twilio's built-in transcription is used. |
 | AI-suggested replies | `ANTHROPIC_API_KEY` (uses Claude Opus 5.5 by default; override with `ANTHROPIC_MODEL`). Each suggestion is one paid API call. Add your prices and policies under Settings so drafts are accurate. |
 | Google reviews, Messenger, Instagram | `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and `META_APP_ID`/`META_APP_SECRET`/`META_VERIFY_TOKEN`. Guide: [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
 | Email alerts | `SMTP_HOST`, `SMTP_FROM`, and usually `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` from any email provider |

@@ -15,6 +15,7 @@ export const MANAGED_KEYS = [
   { name: 'TWILIO_ACCOUNT_SID', group: 'Twilio (texts & calls)', secret: false },
   { name: 'TWILIO_AUTH_TOKEN', group: 'Twilio (texts & calls)', secret: true },
   { name: 'ANTHROPIC_API_KEY', group: 'AI replies (Anthropic)', secret: true },
+  { name: 'OPENAI_API_KEY', group: 'Voicemail transcripts (OpenAI)', secret: true },
   { name: 'SMTP_HOST', group: 'Email alerts', secret: false },
   { name: 'SMTP_PORT', group: 'Email alerts', secret: false },
   { name: 'SMTP_USER', group: 'Email alerts', secret: false },
@@ -36,7 +37,7 @@ const listeners: (() => void)[] = [];
 /** Runs when a saved key changes, e.g. to rebuild the email connection. */
 export const onConfigChange = (fn: () => void) => listeners.push(fn);
 
-export function config(name: ManagedKey | 'ANTHROPIC_MODEL'): string | undefined {
+export function config(name: ManagedKey | 'ANTHROPIC_MODEL' | 'OPENAI_TRANSCRIBE_MODEL'): string | undefined {
   return process.env[name] || saved.get(name) || undefined;
 }
 
