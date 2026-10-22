@@ -2,9 +2,10 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import {
   get, insertMessage, newId, normalizePhone, now, run, upsertContact,
-  type Business, type Conversation, type MessageKind,
+  type Business, type Contact, type Conversation, type MessageKind,
 } from './db';
 import { onInboundMessage } from './inbound';
+import { replyChannels, sendToCustomer } from './outbound';
 import { rateLimit } from './rateLimit';
 
 /**
@@ -26,8 +27,30 @@ export function leadToken(business: Business) {
 const text = (value: unknown, max = 500) => (typeof value === 'string' || typeof value === 'number' ? String(value).trim().slice(0, max) : '');
 const line = (label: string, value: string) => (value ? [`${label}: ${value}`] : []);
 
+interface BookingFacts {
+  device: string;
+  service: string;
+  when: string;
+}
+
+/** Fills the business's booking-reply wording: {name} {business} {device} {service} {when} {phone}. */
+export function fillBookingReply(template: string, business: Business, customerName: string, facts: BookingFacts) {
+  const values: Record<string, string> = {
+    name: customerName.trim().split(/\s+/)[0] || 'there',
+    business: business.name,
+    device: facts.device || 'your device',
+    service: facts.service || 'repair',
+    when: facts.when || 'the time you chose',
+    phone: business.widget_call_number || '',
+  };
+  return template
+    .replace(/\{(name|business|device|service|when|phone)\}/gi, (_, key: string) => values[key.toLowerCase()])
+    .replace(/[ \t]+([.,!?])/g, '$1')
+    .trim();
+}
+
 /** Turns a submitted form into the conversation's first message: a title line, then the details. */
-function describe(type: string, d: Record<string, unknown>): { kind: MessageKind; lines: string[] } {
+function describe(type: string, d: Record<string, unknown>): { kind: MessageKind; lines: string[]; booking?: BookingFacts } {
   const device = [text(d.brand), text(d.model)].filter((v, i, all) => v && all.indexOf(v) === i).join(' ');
   switch (type) {
     case 'booking': {
@@ -35,6 +58,7 @@ function describe(type: string, d: Record<string, unknown>): { kind: MessageKind
       return {
         kind: 'booking',
         lines: ['Booking request', ...line('Device', device || text(d.category)), ...line('Service', text(d.service)), ...line('When', when), ...line('Details', text(d.details || d.issue, 2000))],
+        booking: { device: device || text(d.category), service: text(d.service), when },
       };
     }
     case 'quote':
@@ -71,7 +95,7 @@ leadsRouter.post('/:token', rateLimit('website-lead', 120, 10 * 60 * 1000), (req
   const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) ? emailRaw : null;
   if (!phone && !email) return res.status(400).json({ error: 'A phone number or email is needed' });
 
-  const { kind, lines } = describe(type, data);
+  const { kind, lines, booking } = describe(type, data);
   if (email) lines.push(`Email: ${email}`);
   const pageUrl = text(data.pageUrl || data.source || body.pageUrl, 500);
 
@@ -89,5 +113,18 @@ leadsRouter.post('/:token', rateLimit('website-lead', 120, 10 * 60 * 1000), (req
   const message = insertMessage(conversation, 'in', 'webchat', lines.join('\n'), { kind });
   // No away message: the visitor isn't in a chat to see it; you reply by text or email.
   onInboundMessage(business, conversation, message, { awayMessage: false });
+  if (booking && business.booking_reply_enabled) sendBookingReply(business, conversation, name, booking);
   res.status(201).json({ ok: true, conversationId: conversation.id });
 });
+
+/** Confirms a website booking straight away: by email when they gave one, otherwise by text. */
+function sendBookingReply(business: Business, conversation: Conversation, customerName: string, facts: BookingFacts) {
+  const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
+  const channels = replyChannels(business, conversation, contact);
+  const channel = channels.includes('email') ? 'email' : channels.includes('sms') ? 'sms' : null;
+  if (!channel) return;
+  const body = fillBookingReply(business.booking_reply_text, business, customerName, facts);
+  sendToCustomer(business, conversation, channel, body, { automated: true }).catch((err) =>
+    console.error(`Booking auto-reply for ${business.name} failed:`, err.message),
+  );
+}

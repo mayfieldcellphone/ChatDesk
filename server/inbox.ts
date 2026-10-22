@@ -66,6 +66,8 @@ function publicBusiness(b: Business) {
     repairbillLastSentAt: b.repairbill_last_sent_at,
     repairbillLastError: b.repairbill_last_error,
     replyEmail: b.reply_email,
+    bookingReplyEnabled: Boolean(b.booking_reply_enabled),
+    bookingReplyText: b.booking_reply_text,
     // Where a website's own server posts its forms (bookings, quotes) so they land in the inbox.
     leadsUrl: `${(process.env.PUBLIC_URL || '').replace(/\/$/, '')}/api/leads/${leadToken(b)}`,
     replyEmailEffective: replyAddress(b),
@@ -231,18 +233,24 @@ inboxRouter.patch('/business', (req, res) => {
   const widget = readWidgetSettings(b, business);
   if ('error' in widget) return res.status(400).json({ error: widget.error });
 
+  // Validate everything before writing anything, so a rejected save changes nothing.
+  const bookingReplyEnabled = b.bookingReplyEnabled === undefined ? business.booking_reply_enabled : b.bookingReplyEnabled ? 1 : 0;
+  const bookingReplyText = text(b.bookingReplyText, business.booking_reply_text, 600);
+  if (!bookingReplyText) return res.status(400).json({ error: 'The booking reply needs some text' });
+  let replyEmail = business.reply_email;
+  if (b.replyEmail !== undefined) {
+    replyEmail = String(b.replyEmail ?? '').trim().toLowerCase().slice(0, 200) || null;
+    if (replyEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyEmail)) return res.status(400).json({ error: 'Enter a valid email address for replies' });
+  }
+
   if (b.websiteImported === true) run('UPDATE businesses SET website_imported_at = ? WHERE id = ?', now(), businessId);
+  run('UPDATE businesses SET booking_reply_enabled = ?, booking_reply_text = ?, reply_email = ? WHERE id = ?', bookingReplyEnabled, bookingReplyText, replyEmail, businessId);
   run(
     `UPDATE businesses SET widget_position = ?, widget_offset_x = ?, widget_offset_y = ?, widget_quote = ?, widget_callback = ?,
        widget_call_number = ?, repairbill_url = ?, repairbill_key = ? WHERE id = ?`,
     widget.position, widget.offsetX, widget.offsetY, widget.quote, widget.callback, widget.callNumber,
     widget.repairbillUrl, widget.repairbillKey, businessId,
   );
-  if (b.replyEmail !== undefined) {
-    const replyEmail = String(b.replyEmail ?? '').trim().toLowerCase().slice(0, 200) || null;
-    if (replyEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(replyEmail)) return res.status(400).json({ error: 'Enter a valid email address for replies' });
-    run('UPDATE businesses SET reply_email = ? WHERE id = ?', replyEmail, businessId);
-  }
   if (widget.repairbillUrl !== business.repairbill_url || widget.repairbillKey !== business.repairbill_key) {
     run('UPDATE businesses SET repairbill_last_sent_at = NULL, repairbill_last_error = NULL WHERE id = ?', businessId);
   }

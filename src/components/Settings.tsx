@@ -74,6 +74,7 @@ export default function Settings(props: Props & { autoImport?: boolean }) {
         <div key={version} className="space-y-6">
           <InstallSection business={props.business} />
           <WebsiteFormsSection business={props.business} onSaved={props.onSaved} />
+          <BookingReplySection {...props} />
           <WidgetSection {...props} />
           <WidgetLookSection {...props} />
           <HoursSection {...props} />
@@ -142,6 +143,53 @@ function WebsiteFormsSection({ business, onSaved }: Pick<Props, 'business' | 'on
         The website POSTs JSON such as <code>{'{"type":"booking","data":{"customerName":"…","phone":"…","date":"…"}}'}</code>. Types: booking, quote, corporate.
       </p>
     </Card>
+  );
+}
+
+/** Sample booking for the preview of the automatic reply. */
+const SAMPLE_BOOKING = { name: 'Sarah', device: 'Apple iPhone 13', service: 'Screen Replacement', when: '2026-10-23 at 10:00 AM' };
+
+/** Automatic confirmation sent to customers who book through the website's booking form. */
+function BookingReplySection({ business, onSaved }: Props) {
+  const [form, setForm] = useState({ bookingReplyEnabled: business.bookingReplyEnabled, bookingReplyText: business.bookingReplyText });
+  const { save, status, busy } = useBusinessSave(onSaved);
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    save(form);
+  };
+  const values: Record<string, string> = { ...SAMPLE_BOOKING, business: business.name, phone: business.widgetCallNumber ?? '' };
+  const preview = form.bookingReplyText.replace(/\{(name|business|device|service|when|phone)\}/gi, (_, k: string) => values[k.toLowerCase()]);
+  return (
+    <form onSubmit={submit}>
+      <Card
+        title="Automatic booking reply"
+        description="When someone books on your website, send them a confirmation straight away: by email if they gave one, otherwise by text. It shows in the conversation as “Sent automatically”."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.bookingReplyEnabled} onChange={(e) => setForm({ ...form, bookingReplyEnabled: e.target.checked })} className="h-4 w-4" />
+          Send customers an automatic reply when they book
+        </label>
+        <div>
+          <label className={label} htmlFor="bookingReply">Message</label>
+          <textarea id="bookingReply" rows={3} maxLength={600} className={input} value={form.bookingReplyText} onChange={(e) => setForm({ ...form, bookingReplyText: e.target.value })} required />
+          <p className="mt-1 text-xs text-slate-500">
+            Fills in: <code>{'{name}'}</code> first name, <code>{'{device}'}</code>, <code>{'{service}'}</code>, <code>{'{when}'}</code> booked time, <code>{'{business}'}</code>,{' '}
+            <code>{'{phone}'}</code> your “Call us now” number.
+          </p>
+        </div>
+        <div className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+          <div className="mb-1 text-xs font-medium text-slate-500">Preview</div>
+          {preview}
+        </div>
+        {!business.emailAvailable && !business.smsNumber && (
+          <p className="text-xs text-amber-700">Needs email (SMTP) settings or a Twilio number before anything can be sent.</p>
+        )}
+        <div className="flex items-center gap-3">
+          <button disabled={busy} className={primary}>Save</button>
+          <StatusText status={status} />
+        </div>
+      </Card>
+    </form>
   );
 }
 

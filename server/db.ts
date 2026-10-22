@@ -173,6 +173,13 @@ addColumn('businesses', 'reply_email', 'TEXT');
 // Private token in the address a website's own server posts its forms to (leads.ts).
 addColumn('businesses', 'lead_token', 'TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS businesses_lead_token ON businesses(lead_token) WHERE lead_token IS NOT NULL');
+// Automatic confirmation sent to customers who book on the website (leads.ts). Off until switched on.
+addColumn('businesses', 'booking_reply_enabled', 'INTEGER NOT NULL DEFAULT 0');
+addColumn(
+  'businesses',
+  'booking_reply_text',
+  "TEXT NOT NULL DEFAULT 'Hi {name}, thanks for booking with {business}! We''ve got your {device} booked in for {when}. Reply to this message if you need to change the time.'",
+);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS calls (
@@ -291,6 +298,8 @@ export interface Business {
   repairbill_last_error: string | null;
   reply_email: string | null;
   lead_token: string | null;
+  booking_reply_enabled: number;
+  booking_reply_text: string;
   created_at: string;
 }
 

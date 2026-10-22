@@ -41,6 +41,9 @@ export interface Business {
   replyEmailEffective: string | null;
   /** Private address a website's own server posts its forms (bookings, quotes) to. */
   leadsUrl: string;
+  /** Automatic confirmation to customers who book on the website. */
+  bookingReplyEnabled: boolean;
+  bookingReplyText: string;
 }
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
