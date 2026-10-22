@@ -171,6 +171,7 @@ async function handle(businessId: string, conversationId: string, messageId: str
     }
   }
   console.log(`Assistant (${business.name}): ${decision.action === 'answer' ? 'answered' : 'handed over'} by ${channel} in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+  run('INSERT INTO assistant_log (id, business_id, conversation_id, message_id, action, created_at) VALUES (?, ?, ?, ?, ?, ?)', newId(), business.id, conversationId, messageId, decision.action, now());
 
   if (decision.action === 'answer') {
     await sendToCustomer(business, conversation, channel, decision.reply, { assistant: true });

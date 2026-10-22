@@ -5,8 +5,9 @@ import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Reviews from './components/Reviews';
 import Integrations from './components/Integrations';
+import Reports from './components/Reports';
 
-const VIEWS = ['inbox', 'reviews', 'integrations', 'settings'] as const;
+const VIEWS = ['inbox', 'reports', 'reviews', 'integrations', 'settings'] as const;
 type View = (typeof VIEWS)[number];
 
 /**
@@ -35,6 +36,7 @@ export default function App() {
   const [autoImport, setAutoImport] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [openConversationId, setOpenConversationId] = useState<string | null>(route.conversationId);
 
   const loadMe = () =>
     api<Me>('/me')
@@ -87,6 +89,12 @@ export default function App() {
   const go = (v: View) => {
     setView(v);
     setMenuOpen(false);
+  };
+  // From Reports: open a conversation in the inbox, switching business first if needed.
+  const openConversation = async (businessId: string, conversationId: string) => {
+    if (businessId !== me.business.id) await switchBusiness(businessId);
+    setOpenConversationId(conversationId);
+    setView('inbox');
   };
   const totalUnread = me.businesses.reduce((n, b) => n + b.unread, 0);
 
@@ -157,11 +165,13 @@ export default function App() {
           <Inbox
             business={me.business}
             businesses={me.businesses}
-            initialConversationId={route.conversationId}
+            initialConversationId={openConversationId}
             onSwitchBusiness={switchBusiness}
             onActivity={refreshCounts}
             onOpenSettings={() => setView('settings')}
           />
+        ) : view === 'reports' ? (
+          <Reports key={me.business.id} business={me.business} businessCount={me.businesses.length} onOpenConversation={openConversation} />
         ) : view === 'reviews' ? (
           <Reviews key={me.business.id} business={me.business} onSaved={(business) => setMe({ ...me, business })} onOpenIntegrations={() => setView('integrations')} />
         ) : view === 'integrations' ? (

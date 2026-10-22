@@ -10,6 +10,7 @@ import { smsRouter } from './sms';
 import { voiceRouter } from './voice';
 import { widgetRouter } from './widget';
 import { leadsRouter } from './leads';
+import { reportsRouter, startWeeklyReports } from './reports';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -28,6 +29,7 @@ app.use('/api/widget', widgetRouter);
 app.use('/api/leads', leadsRouter);
 app.use('/api/integrations', integrationsRouter);
 app.use('/api/reviews', reviewsRouter);
+app.use('/api/reports', reportsRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -58,6 +60,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 startReviewSync();
+startWeeklyReports();
 
 const port = Number(process.env.PORT) || 3000;
 app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));

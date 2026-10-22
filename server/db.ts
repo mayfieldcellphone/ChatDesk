@@ -262,6 +262,24 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
 
+// What the AI assistant did with each customer question, for Reports.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS assistant_log (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    message_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
+    action TEXT NOT NULL CHECK (action IN ('answer', 'handoff')),
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS assistant_log_business ON assistant_log(business_id, created_at);
+  CREATE INDEX IF NOT EXISTS conversations_created ON conversations(business_id, created_at);
+  CREATE INDEX IF NOT EXISTS calls_business ON calls(business_id, created_at);
+`);
+// Weekly summary email (reports.ts): off until switched on; the local date it was last sent.
+addColumn('businesses', 'weekly_report', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('businesses', 'weekly_report_sent_on', 'TEXT');
+
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
 export interface Business {
@@ -302,6 +320,8 @@ export interface Business {
   booking_reply_text: string;
   assistant_mode: 'off' | 'always' | 'after_hours' | 'no_reply';
   assistant_handoff: string;
+  weekly_report: number;
+  weekly_report_sent_on: string | null;
   created_at: string;
 }
 
@@ -328,7 +348,7 @@ export interface Conversation {
   created_at: string;
   /** For Facebook/Instagram conversations: the connected Page or account the customer messaged. */
   connection_id?: string | null;
-  /** 1: someone paused the AI assistant here. 2: staff replied, so it waits 30 minutes after their last message. */
+  /** 1: someone paused the AI assistant here. */
   assistant_paused?: number;
 }
 

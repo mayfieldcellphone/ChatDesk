@@ -100,6 +100,15 @@ export async function emailReviewAlert(business: Business, reviews: Review[]) {
   });
 }
 
+/** Sends the weekly summary (reports.ts) to everyone on the business. Returns false when email isn't set up. */
+export async function emailWeeklyReport(business: Business, subject: string, text: string) {
+  const mailer = getTransport();
+  const recipients = all<{ email: string }>('SELECT u.email FROM users u JOIN memberships m ON m.user_id = u.id WHERE m.business_id = ?', business.id);
+  if (!mailer || recipients.length === 0) return false;
+  await mailer.sendMail({ from: config('SMTP_FROM'), to: recipients.map((r) => r.email), subject, text });
+  return true;
+}
+
 /** The address customers' answers go to: the business's reply address, or the owner's login email. */
 export function replyAddress(business: Business) {
   if (business.reply_email) return business.reply_email;
