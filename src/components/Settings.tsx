@@ -73,6 +73,7 @@ export default function Settings(props: Props & { autoImport?: boolean }) {
         />
         <div key={version} className="space-y-6">
           <InstallSection business={props.business} />
+          <WebsiteFormsSection business={props.business} onSaved={props.onSaved} />
           <WidgetSection {...props} />
           <WidgetLookSection {...props} />
           <HoursSection {...props} />
@@ -106,6 +107,40 @@ function InstallSection({ business }: { business: Business }) {
           Preview on a test page →
         </a>
       </div>
+    </Card>
+  );
+}
+
+/** The private address a website's own server can post its booking/quote forms to. */
+function WebsiteFormsSection({ business, onSaved }: Pick<Props, 'business' | 'onSaved'>) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await navigator.clipboard.writeText(business.leadsUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  const regenerate = async () => {
+    if (!confirm('Make a new address? The current one stops working, so update your website with the new one.')) return;
+    const { business: updated } = await api<{ business: Business }>('/business/lead-token', { method: 'POST' });
+    onSaved(updated);
+  };
+  return (
+    <Card
+      title="Website forms (bookings & quotes)"
+      description="If your website has its own booking or quote forms, its server can send each one here, and it lands in the inbox like a chat. Keep this address private."
+    >
+      <pre className="overflow-x-auto rounded-md bg-slate-900 p-3 text-xs text-slate-100">{business.leadsUrl}</pre>
+      <div className="flex gap-3 text-sm">
+        <button onClick={copy} className="rounded-md bg-slate-900 px-3 py-1.5 font-medium text-white">
+          {copied ? 'Copied!' : 'Copy address'}
+        </button>
+        <button onClick={regenerate} className="px-3 py-1.5 text-slate-500 hover:underline">
+          Make a new address
+        </button>
+      </div>
+      <p className="text-xs text-slate-500">
+        The website POSTs JSON such as <code>{'{"type":"booking","data":{"customerName":"…","phone":"…","date":"…"}}'}</code>. Types: booking, quote, corporate.
+      </p>
     </Card>
   );
 }

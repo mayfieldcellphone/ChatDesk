@@ -9,6 +9,7 @@ import { startReviewSync } from './google';
 import { smsRouter } from './sms';
 import { voiceRouter } from './voice';
 import { widgetRouter } from './widget';
+import { leadsRouter } from './leads';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -24,6 +25,7 @@ app.use('/api/meta', metaWebhookRouter);
 app.use(express.json({ limit: '50kb' }));
 app.use('/api/auth', authRouter);
 app.use('/api/widget', widgetRouter);
+app.use('/api/leads', leadsRouter);
 app.use('/api/integrations', integrationsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api', inboxRouter);

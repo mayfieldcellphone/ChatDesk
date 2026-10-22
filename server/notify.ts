@@ -61,6 +61,10 @@ export async function emailTeam(business: Business, conversation: Conversation, 
           ? { subject: `Quote request from ${name}`, intro: `${who} asked ${business.name} for a quote on the website:` }
           : message.kind === 'callback'
             ? { subject: `Call back ${name}`, intro: `${who} asked ${business.name} to call them back:` }
+            : message.kind === 'booking'
+            ? { subject: `New booking from ${name}`, intro: `${who} booked a repair with ${business.name} on the website:` }
+            : message.kind === 'enquiry'
+            ? { subject: `Website enquiry from ${name}`, intro: `${who} sent ${business.name} a form on the website:` }
             : { subject: `New ${message.channel === 'sms' ? 'text' : 'web chat'} message from ${name}`, intro: `${who} wrote to ${business.name}:` };
   const body = message.kind === 'call' ? '' : `\n\n${message.body}`;
 

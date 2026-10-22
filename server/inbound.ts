@@ -29,6 +29,8 @@ export async function pushMessage(business: Business, conversation: Conversation
     : message.kind === 'call' ? '📞 Missed call'
     : message.kind === 'quote' ? `📋 ${message.body.replace(/^Quote request\n/, 'Quote request: ').replace(/\n/g, ' · ')}`
     : message.kind === 'callback' ? `📞 Call back request · ${message.body.split('\n').slice(1).join(' · ')}`
+    : message.kind === 'booking' ? `📅 Booking · ${message.body.split('\n').slice(1).join(' · ')}`
+    : message.kind === 'enquiry' ? `📨 ${message.body.split('\n').join(' · ')}`
     : `${CHANNEL_WORDS[message.channel]}: ${message.body}`;
   await pushToBusiness(business.id, {
     title: `${who} · ${business.name}`,

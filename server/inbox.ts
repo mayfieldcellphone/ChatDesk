@@ -15,6 +15,7 @@ import { defaultChannel, DeliveryError, replyChannels, sendToCustomer } from './
 import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
 import { normalizeRepairbillUrl, sendLead } from './repairbill';
+import { leadToken } from './leads';
 import { pushPublicKey, pushToBusiness } from './push';
 import { createBusiness, setSession } from './auth';
 import { isAdmin } from './config';
@@ -65,6 +66,8 @@ function publicBusiness(b: Business) {
     repairbillLastSentAt: b.repairbill_last_sent_at,
     repairbillLastError: b.repairbill_last_error,
     replyEmail: b.reply_email,
+    // Where a website's own server posts its forms (bookings, quotes) so they land in the inbox.
+    leadsUrl: `${(process.env.PUBLIC_URL || '').replace(/\/$/, '')}/api/leads/${leadToken(b)}`,
     replyEmailEffective: replyAddress(b),
   };
 }
@@ -289,6 +292,13 @@ function readWidgetSettings(b: Record<string, unknown>, business: Business) {
     callback: flag(b.widgetCallback, business.widget_callback),
   };
 }
+
+/** New private address for website forms; the old one stops working. */
+inboxRouter.post('/business/lead-token', (req, res) => {
+  const { businessId } = req.session!;
+  run('UPDATE businesses SET lead_token = NULL WHERE id = ?', businessId);
+  res.json({ business: publicBusiness(loadBusiness(businessId)) });
+});
 
 /** Sends a sample enquiry to RepairBill so the owner can see it arrive. */
 inboxRouter.post('/business/repairbill/test', async (req, res) => {

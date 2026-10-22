@@ -170,6 +170,9 @@ addColumn('businesses', 'repairbill_last_sent_at', 'TEXT');
 addColumn('businesses', 'repairbill_last_error', 'TEXT');
 // Where customers' answers to emails from the inbox go (default: the owner's login email).
 addColumn('businesses', 'reply_email', 'TEXT');
+// Private token in the address a website's own server posts its forms to (leads.ts).
+addColumn('businesses', 'lead_token', 'TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS businesses_lead_token ON businesses(lead_token) WHERE lead_token IS NOT NULL');
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS calls (
@@ -287,6 +290,7 @@ export interface Business {
   repairbill_last_sent_at: string | null;
   repairbill_last_error: string | null;
   reply_email: string | null;
+  lead_token: string | null;
   created_at: string;
 }
 
@@ -364,8 +368,8 @@ export interface Review {
   created_at: string;
 }
 
-/** quote and callback: requests sent from the website widget's menu. */
-export type MessageKind = 'text' | 'call' | 'voicemail' | 'quote' | 'callback';
+/** quote and callback: requests sent from the website widget's menu. booking and enquiry: website forms (leads.ts). */
+export type MessageKind = 'text' | 'call' | 'voicemail' | 'quote' | 'callback' | 'booking' | 'enquiry';
 
 export interface Call {
   id: string;

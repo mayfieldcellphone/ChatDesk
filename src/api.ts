@@ -39,6 +39,8 @@ export interface Business {
   replyEmail: string | null;
   /** Where customers' answers to emails go: replyEmail, or the owner's login email. */
   replyEmailEffective: string | null;
+  /** Private address a website's own server posts its forms (bookings, quotes) to. */
+  leadsUrl: string;
 }
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -98,7 +100,7 @@ export interface Message {
   body: string;
   author_name: string | null;
   automated: number;
-  kind: 'text' | 'call' | 'voicemail' | 'quote' | 'callback';
+  kind: 'text' | 'call' | 'voicemail' | 'quote' | 'callback' | 'booking' | 'enquiry';
   duration: number | null;
   created_at: string;
 }
