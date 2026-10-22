@@ -176,7 +176,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
     const assistantPaused = !conversation.assistantPaused;
     try {
       await api(`/conversations/${conversation.id}`, { method: 'PATCH', body: { assistantPaused } });
-      setConversation({ ...conversation, assistantPaused });
+      setConversation({ ...conversation, assistantPaused, assistantPausedByReply: false });
     } catch (err) {
       setError((err as Error).message);
     }
@@ -309,9 +309,15 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
           <button
             onClick={toggleAssistant}
             className={`shrink-0 rounded-md border px-3 py-1.5 text-sm ${conversation.assistantPaused ? 'border-slate-300 text-slate-500' : 'border-violet-300 bg-violet-50 text-violet-700'}`}
-            title={conversation.assistantPaused ? 'The assistant is not answering in this conversation' : 'The assistant may answer this customer from your FAQs'}
+            title={
+              !conversation.assistantPaused
+                ? 'The assistant answers this customer instantly from your FAQs. Click to pause it here.'
+                : conversation.assistantPausedByReply
+                  ? 'You replied, so the assistant leaves this to you until 30 minutes after your last message. Click to switch it back on now.'
+                  : 'Paused in this conversation. Click to switch it back on.'
+            }
           >
-            🤖 {conversation.assistantPaused ? 'Assistant paused' : 'Assistant on'}
+            🤖 {!conversation.assistantPaused ? 'Assistant on' : conversation.assistantPausedByReply ? 'Assistant waiting (you replied)' : 'Assistant paused'}
           </button>
         )}
         <button

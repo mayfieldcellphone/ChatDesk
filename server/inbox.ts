@@ -16,7 +16,7 @@ import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
 import { normalizeRepairbillUrl, sendLead } from './repairbill';
 import { leadToken } from './leads';
-import { decide, faqNeedsEditing, parseTable } from './assistant';
+import { assistantPausedNow, decide, faqNeedsEditing, parseTable } from './assistant';
 import { pushPublicKey, pushToBusiness } from './push';
 import { createBusiness, setSession } from './auth';
 import { isAdmin } from './config';
@@ -402,8 +402,7 @@ inboxRouter.post('/assistant/test', rateLimit('assistant-test', 30, 10 * 60 * 10
   if (!aiConfigured()) return res.status(400).json({ error: 'Add ANTHROPIC_API_KEY under Integrations → Server keys first' });
   try {
     const decision = await decide(business, 'Test customer', [{ direction: 'in', body: question, automated: 0 }]);
-    const holding = business.hours_enabled && !isOpen(business) ? business.away_message : business.assistant_handoff;
-    res.json({ action: decision.action, reply: decision.action === 'answer' ? decision.reply : holding });
+    res.json({ action: decision.action, reply: decision.action === 'answer' ? decision.reply : business.assistant_handoff });
   } catch (err) {
     console.error('Assistant test failed:', err);
     res.status(502).json({ error: 'The AI service had a problem. Check the Anthropic key, then try again.' });
@@ -629,7 +628,9 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       replyChannels: replyChannels(loadBusiness(businessId), conversation, contact),
       defaultChannel: defaultChannel(loadBusiness(businessId), conversation, contact),
       tags: tagsByConversation([conversation.id]).get(conversation.id) ?? [],
-      assistantPaused: Boolean(conversation.assistant_paused),
+      assistantPaused: assistantPausedNow(conversation.id),
+      // Paused because staff replied (it comes back by itself) rather than switched off here.
+      assistantPausedByReply: conversation.assistant_paused === 2,
     },
     messages: loadMessages(conversation.id),
   });
@@ -649,8 +650,9 @@ inboxRouter.post('/conversations/:id/messages', async (req, res) => {
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
   try {
     const message = await sendToCustomer(loadBusiness(businessId), conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
-    // A person has taken over: the assistant stays quiet here from now on (it can be switched back on).
-    run('UPDATE conversations SET assistant_paused = 1 WHERE id = ?', conversation.id);
+    // A person has stepped in: the assistant leaves this conversation to them for 30 minutes after
+    // their last message. A manual pause (1) stays as it is.
+    run('UPDATE conversations SET assistant_paused = 2 WHERE id = ? AND assistant_paused != 1', conversation.id);
     res.status(201).json({ message });
   } catch (err) {
     if (err instanceof DeliveryError) return res.status(err.message.includes('not sent') ? 502 : 400).json({ error: err.message });

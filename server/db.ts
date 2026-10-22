@@ -328,7 +328,7 @@ export interface Conversation {
   created_at: string;
   /** For Facebook/Instagram conversations: the connected Page or account the customer messaged. */
   connection_id?: string | null;
-  /** 1 once staff have replied (or paused it): the AI assistant stays out of this conversation. */
+  /** 1: someone paused the AI assistant here. 2: staff replied, so it waits 30 minutes after their last message. */
   assistant_paused?: number;
 }
 
@@ -580,7 +580,11 @@ addColumn('businesses', 'assistant_mode', "TEXT NOT NULL DEFAULT 'off'");
 addColumn(
   'businesses',
   'assistant_handoff',
-  "TEXT NOT NULL DEFAULT 'Thanks for your message! A team member will get back to you shortly.'",
+  "TEXT NOT NULL DEFAULT 'Thanks for your question! We''ll get back to you ASAP with an answer.'",
+);
+// The first wording; businesses that never changed it get the new one.
+run(
+  "UPDATE businesses SET assistant_handoff = 'Thanks for your question! We''ll get back to you ASAP with an answer.' WHERE assistant_handoff = 'Thanks for your message! A team member will get back to you shortly.'",
 );
 // Set when staff reply in a conversation (or pause it), so the assistant never talks over them.
 addColumn('conversations', 'assistant_paused', 'INTEGER NOT NULL DEFAULT 0');

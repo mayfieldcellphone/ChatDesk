@@ -664,7 +664,7 @@ function TagsSection() {
 
 const ASSISTANT_MODES: { value: Business['assistantMode']; label: string; hint: string }[] = [
   { value: 'off', label: 'Off', hint: 'Only you reply.' },
-  { value: 'always', label: 'Always, straight away', hint: 'Customers get an answer within seconds, day or night.' },
+  { value: 'always', label: 'Always, straight away', hint: 'Customers get an answer within seconds, day or night. Recommended.' },
   { value: 'after_hours', label: 'Only outside opening hours', hint: 'You reply while the shop is open. Needs office hours turned on.' },
   { value: 'no_reply', label: 'Only if nobody replies within 2 minutes', hint: 'A safety net when you’re busy.' },
 ];
@@ -696,7 +696,7 @@ function AssistantSection({ business, onSaved }: Props) {
     <form onSubmit={submit}>
       <Card
         title="AI assistant"
-        description="Answers customers in web chat and texts on its own, using only your FAQs and AI notes. If the answer isn’t there, it sends your holding message and tags the conversation “Needs reply”. Once you reply in a conversation, it stays quiet there."
+        description="Answers customers in web chat and texts on its own, using only your FAQs and AI notes. If the answer isn’t there, it sends your holding message and tags the conversation “Needs reply”. You can step in any time: after you reply, it leaves that conversation to you until 30 minutes after your last message."
       >
         {!business.aiAvailable && <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">Needs ANTHROPIC_API_KEY under Integrations → Server keys.</p>}
         <div className="space-y-2">
@@ -715,7 +715,7 @@ function AssistantSection({ business, onSaved }: Props) {
         <div>
           <label className={label} htmlFor="handoff">Holding message (when it can’t answer)</label>
           <textarea id="handoff" rows={2} maxLength={500} className={input} value={form.assistantHandoff} onChange={(e) => setForm({ ...form, assistantHandoff: e.target.value })} required />
-          <p className="mt-1 text-xs text-slate-500">Outside opening hours your away message is used instead.</p>
+          <p className="mt-1 text-xs text-slate-500">Sent each time it can’t answer a question (never twice in a row), day or night.</p>
         </div>
         <div className="flex items-center gap-3">
           <button disabled={busy} className={primary}>Save</button>
