@@ -490,7 +490,7 @@
   // ---------- Boot ----------
   request('GET', '/config').then(function (config) {
     state.config = config;
-    host.style.setProperty('--c', /^#[0-9a-f]{6}$/i.test(config.color) ? config.color : '#2563eb');
+    host.style.setProperty('--c', /^#[0-9a-f]{6}$/i.test(config.color) ? config.color : '#087565');
     root.querySelector('.head h2').textContent = config.name;
     root.querySelector('.head .greeting').textContent = config.greeting;
     if (config.open === false) root.querySelector('.head .away').style.display = 'block';

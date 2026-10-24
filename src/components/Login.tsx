@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { api } from '../api';
+import { Logo, Wordmark } from './Logo';
 
 export default function Login({ onSignedIn }: { onSignedIn: (isNewAccount: boolean) => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -28,7 +29,10 @@ export default function Login({ onSignedIn }: { onSignedIn: (isNewAccount: boole
     <div className="flex h-full items-center justify-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-xl bg-white p-8 shadow">
         <div>
-          <h1 className="text-2xl font-bold">ChatBird</h1>
+          <h1 className="flex items-center gap-2 text-2xl">
+            <Logo size={36} />
+            <Wordmark />
+          </h1>
           <p className="text-sm text-slate-500">
             {mode === 'login' ? 'Sign in to your inbox' : 'Create an account for your business'}
           </p>

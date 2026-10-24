@@ -135,7 +135,7 @@ authRouter.post('/login', async (req, res) => {
 
 /** Creates a new business owned by the user (used for sign-up's first business and "Add a business"). */
 // New businesses get distinct colours so they're easy to tell apart in the combined inbox.
-const PALETTE = ['#2563eb', '#16a34a', '#db2777', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
+const PALETTE = ['#087565', '#16a34a', '#db2777', '#ea580c', '#7c3aed', '#0891b2', '#ca8a04', '#dc2626'];
 
 export function createBusiness(userId: string, name: string, website: string | null) {
   const businessId = newId();

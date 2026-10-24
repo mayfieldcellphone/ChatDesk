@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+/*
+ * ChatBird brand. The app's "blue" is Bird teal and its darkest slates are night navy, so every
+ * existing blue button, link and badge takes the brand colour.
+ */
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-blue-50: #eaf7f4;
+  --color-blue-100: #d3eee8;
+  --color-blue-200: #a8ddd2;
+  --color-blue-300: #6fc4b4;
+  --color-blue-400: #34a592;
+  --color-blue-500: #128c79;
+  --color-blue-600: #087565;
+  --color-blue-700: #065c50;
+  --color-blue-800: #054a41;
+  --color-blue-900: #043d36;
+  --color-slate-800: #1e3352;
+  --color-slate-900: #0f1e36;
+}
+
 html,
 body,
 #root {

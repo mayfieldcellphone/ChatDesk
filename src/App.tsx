@@ -7,9 +7,30 @@ import Reviews from './components/Reviews';
 import Integrations from './components/Integrations';
 import Reports from './components/Reports';
 import Marketing from './components/Marketing';
+import { Logo, Wordmark } from './components/Logo';
 
 const VIEWS = ['inbox', 'reports', 'marketing', 'reviews', 'integrations', 'settings'] as const;
 type View = (typeof VIEWS)[number];
+
+// Line icons for the side menu (24px grid, drawn with the current text colour).
+const VIEW_ICONS: Record<View, string[]> = {
+  inbox: ['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],
+  reports: ['M4 20V10', 'M10 20V4', 'M16 20v-7', 'M22 20H2'],
+  marketing: ['M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z', 'M16 9a4 4 0 0 1 0 6', 'M19 6a8 8 0 0 1 0 12'],
+  reviews: ['m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z'],
+  integrations: ['M9 7V3', 'M15 7V3', 'M6 7h12v4a6 6 0 0 1-12 0z', 'M12 17v4'],
+  settings: ['M4 6h9', 'M17 6h3', 'M4 12h3', 'M11 12h9', 'M4 18h11', 'M19 18h1', 'M15 4a2 2 0 1 1 0 4a2 2 0 1 1 0-4', 'M9 10a2 2 0 1 1 0 4a2 2 0 1 1 0-4', 'M17 16a2 2 0 1 1 0 4a2 2 0 1 1 0-4'],
+};
+
+function ViewIcon({ view }: { view: View }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {VIEW_ICONS[view].map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
+}
 
 /**
  * Reads the address once, then tidies it: ?view=, a sign-in result from Integrations, and
@@ -101,7 +122,10 @@ export default function App() {
 
   const sidebar = (
     <nav className="flex h-full w-64 shrink-0 flex-col bg-slate-900 text-slate-300">
-      <div className="px-5 pb-3 pt-5 text-lg font-bold text-white">ChatBird</div>
+      <div className="flex items-center gap-2.5 px-5 pb-4 pt-5 text-xl">
+        <Logo size={34} />
+        <Wordmark dark />
+      </div>
       <div className="mx-2 mb-3 space-y-0.5 rounded-lg bg-slate-800/60 p-1.5">
         {me.businesses.map((b) => (
           <button
@@ -125,8 +149,11 @@ export default function App() {
         <button
           key={v}
           onClick={() => go(v)}
-          className={`mx-2 rounded-md px-3 py-2 text-left text-sm font-medium capitalize ${view === v ? 'bg-slate-700 text-white' : 'hover:bg-slate-800'}`}
+          className={`mx-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold capitalize ${view === v ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/60 hover:text-white'}`}
         >
+          <span className={view === v ? 'text-blue-300' : 'text-slate-400'}>
+            <ViewIcon view={v} />
+          </span>
           {v}
         </button>
       ))}
@@ -148,8 +175,9 @@ export default function App() {
       <header className="flex items-center gap-3 bg-slate-900 px-4 py-3 text-white md:hidden">
         <button onClick={() => setMenuOpen(true)} aria-label="Menu" className="relative text-xl leading-none">
           ☰
-          {totalUnread > 0 && <span className="absolute -right-2 -top-1 h-2.5 w-2.5 rounded-full bg-blue-500" />}
+          {totalUnread > 0 && <span className="absolute -right-2 -top-1 h-2.5 w-2.5 rounded-full bg-amber-400" />}
         </button>
+        <Logo size={26} />
         <span className="h-2.5 w-2.5 rounded-full" style={{ background: me.business.color }} />
         <span className="truncate font-semibold">{me.business.name}</span>
         <span className="ml-auto text-sm capitalize text-slate-400">{view}</span>
