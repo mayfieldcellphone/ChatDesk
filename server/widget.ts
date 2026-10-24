@@ -70,6 +70,8 @@ widgetRouter.get('/:key/config', (req, res) => {
     offsetY: business.widget_offset_y,
     // The menu shown before a chat starts. Chat is always available.
     options: { quote: Boolean(business.widget_quote), callback: Boolean(business.widget_callback), callNumber: business.widget_call_number },
+    // Shortcuts to the same options, shown above the closed chat button.
+    buttons: Boolean(business.widget_buttons),
   });
 });
 

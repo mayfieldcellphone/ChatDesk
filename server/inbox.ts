@@ -60,6 +60,7 @@ function publicBusiness(b: Business) {
     widgetOffsetY: b.widget_offset_y,
     widgetQuote: Boolean(b.widget_quote),
     widgetCallback: Boolean(b.widget_callback),
+    widgetButtons: Boolean(b.widget_buttons),
     widgetCallNumber: b.widget_call_number,
     repairbillUrl: b.repairbill_url,
     // The key is in the site's HTML anyway, but there's no need to show it again in full.
@@ -256,9 +257,9 @@ inboxRouter.patch('/business', (req, res) => {
     bookingReplyEnabled, bookingReplyText, replyEmail, assistantMode, assistantHandoff, businessId,
   );
   run(
-    `UPDATE businesses SET widget_position = ?, widget_offset_x = ?, widget_offset_y = ?, widget_quote = ?, widget_callback = ?,
+    `UPDATE businesses SET widget_position = ?, widget_offset_x = ?, widget_offset_y = ?, widget_quote = ?, widget_callback = ?, widget_buttons = ?,
        widget_call_number = ?, repairbill_url = ?, repairbill_key = ? WHERE id = ?`,
-    widget.position, widget.offsetX, widget.offsetY, widget.quote, widget.callback, widget.callNumber,
+    widget.position, widget.offsetX, widget.offsetY, widget.quote, widget.callback, widget.buttons, widget.callNumber,
     widget.repairbillUrl, widget.repairbillKey, businessId,
   );
   if (widget.repairbillUrl !== business.repairbill_url || widget.repairbillKey !== business.repairbill_key) {
@@ -308,6 +309,7 @@ function readWidgetSettings(b: Record<string, unknown>, business: Business) {
     position, offsetX, offsetY, callNumber, repairbillUrl, repairbillKey,
     quote: flag(b.widgetQuote, business.widget_quote),
     callback: flag(b.widgetCallback, business.widget_callback),
+    buttons: flag(b.widgetButtons, business.widget_buttons),
   };
 }
 

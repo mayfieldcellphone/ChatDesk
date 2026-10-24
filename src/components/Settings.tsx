@@ -255,6 +255,7 @@ function WidgetLookSection({ business, onSaved }: Props) {
     widgetOffsetY: business.widgetOffsetY,
     widgetQuote: business.widgetQuote,
     widgetCallback: business.widgetCallback,
+    widgetButtons: business.widgetButtons,
     widgetCallNumber: business.widgetCallNumber ?? '',
   });
   const { save, status, busy } = useBusinessSave(onSaved);
@@ -315,6 +316,12 @@ function WidgetLookSection({ business, onSaved }: Props) {
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={form.widgetCallback} onChange={(e) => setForm({ ...form, widgetCallback: e.target.checked })} />
             📞 Request a call back <span className="text-slate-400">(best time to call)</span>
+          </label>
+          <label className="flex items-start gap-2 pt-1 text-sm">
+            <input type="checkbox" className="mt-0.5" checked={form.widgetButtons} onChange={(e) => setForm({ ...form, widgetButtons: e.target.checked })} />
+            <span>
+              Show quick buttons above the chat icon <span className="text-slate-400">(“Chat with us”, “Get a quote”, “Request a call back”, so visitors see the choices before they click)</span>
+            </span>
           </label>
           <div>
             <label className={label} htmlFor="callnum">☎️ “Call us now” number (leave empty to hide)</label>

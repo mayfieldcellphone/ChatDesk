@@ -30,6 +30,7 @@ export interface Business {
   widgetOffsetY: number;
   widgetQuote: boolean;
   widgetCallback: boolean;
+  widgetButtons: boolean;
   widgetCallNumber: string | null;
   repairbillUrl: string | null;
   /** Last characters of the saved RepairBill key, e.g. ••••a1b2. */

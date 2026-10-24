@@ -163,6 +163,8 @@ addColumn('businesses', 'widget_offset_x', 'INTEGER NOT NULL DEFAULT 20');
 addColumn('businesses', 'widget_offset_y', 'INTEGER NOT NULL DEFAULT 20');
 addColumn('businesses', 'widget_quote', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('businesses', 'widget_callback', 'INTEGER NOT NULL DEFAULT 1');
+// Quick buttons (Chat / Get a quote / Call back) shown above the closed chat button.
+addColumn('businesses', 'widget_buttons', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('businesses', 'widget_call_number', 'TEXT');
 addColumn('businesses', 'repairbill_url', 'TEXT');
 addColumn('businesses', 'repairbill_key', 'TEXT');
@@ -341,6 +343,7 @@ export interface Business {
   widget_offset_y: number;
   widget_quote: number;
   widget_callback: number;
+  widget_buttons: number;
   widget_call_number: string | null;
   repairbill_url: string | null;
   repairbill_key: string | null;

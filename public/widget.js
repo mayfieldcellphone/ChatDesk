@@ -92,12 +92,22 @@
     '.composer textarea{flex:1;resize:none;border:1px solid #cbd5e1;border-radius:8px;padding:9px;font-size:14px;height:40px;max-height:100px;color:#0f172a}' +
     '.composer button{border:0;border-radius:8px;background:var(--c);color:#fff;padding:0 14px;font-weight:600;cursor:pointer}' +
     '.composer.hidden{display:none}' +
+    // Quick buttons above the closed chat button.
+    '.quick{position:fixed;display:flex;flex-direction:column;gap:8px;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;pointer-events:none}' +
+    '.quick.show{opacity:1;transform:none;pointer-events:auto}' +
+    '.quick.right{align-items:flex-end}.quick.left{align-items:flex-start}' +
+    '.pill{display:flex;align-items:center;gap:8px;border:0;border-radius:999px;background:#fff;color:#0f172a;padding:8px 16px 8px 8px;font-size:14px;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.18);white-space:nowrap;transition:transform .15s}' +
+    '.pill:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(0,0,0,.22)}' +
+    '.pill .ic{width:28px;height:28px;border-radius:50%;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center;flex:none}' +
+    '.quick .x{width:24px;height:24px;border-radius:50%;border:0;background:#fff;color:#64748b;font-size:15px;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.18);padding:0}' +
+    '@media (max-width:480px){.pill{font-size:13px;padding:6px 13px 6px 6px}.pill .ic{width:24px;height:24px}}' +
     '</style>' +
     '<div class="panel" role="dialog" aria-label="Chat with us">' +
     '  <div class="head"><h2></h2><p class="greeting"></p><p class="away">We’re away right now. Leave a message and we’ll get back to you when we open.</p></div>' +
     '  <div class="body"></div>' +
     '  <form class="composer hidden"><textarea placeholder="Type a message…" aria-label="Message" maxlength="2000"></textarea><button type="submit">Send</button></form>' +
     '</div>' +
+    '<div class="quick" role="group" aria-label="Contact options"></div>' +
     '<button class="launcher" type="button" aria-label="Open chat">' +
     '  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
     '  <span class="badge"></span>' +
@@ -108,6 +118,7 @@
   var bodyEl = root.querySelector('.body');
   var composer = root.querySelector('.composer');
   var composerInput = composer.querySelector('textarea');
+  var quick = root.querySelector('.quick');
   var unseen = 0;
 
   var CHAT_ICON = launcher.innerHTML;
@@ -135,6 +146,7 @@
       else if (!open && state.view !== 'menu') renderMenu();
     }
     state.open = open;
+    showQuick(!open);
     panel.classList.toggle('open', open);
     launcher.innerHTML = open ? CLOSE_ICON : CHAT_ICON;
     launcher.setAttribute('aria-label', open ? 'Close chat' : 'Open chat');
@@ -146,6 +158,60 @@
     }
   }
   launcher.addEventListener('click', function () { toggle(!state.open); });
+
+  // ---------- Quick buttons ----------
+  // "Chat with us", "Get a quote", "Request a call back" above the closed button, each opening
+  // straight to that form. Closing them with × hides them for the rest of the visit.
+  var quickKey = storeKey + ':quick-closed';
+  var svg = function (d) {
+    return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
+  };
+  var QUICK_ICONS = {
+    chat: svg('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+    quote: svg('<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.2"/>'),
+    callback: svg('<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>'),
+  };
+  function quickClosed() {
+    try { return sessionStorage.getItem(quickKey) === '1'; } catch (e) { return false; }
+  }
+  function showQuick(on) {
+    quick.classList.toggle('show', Boolean(on && quick.childNodes.length && !quickClosed()));
+  }
+  function buildQuick() {
+    quick.innerHTML = '';
+    if (!state.config.buttons) return;
+    var o = state.config.options || {};
+    var items = [['chat', QUICK_ICONS.chat, state.session ? 'Continue your chat' : 'Chat with us']];
+    if (o.quote) items.push(['quote', QUICK_ICONS.quote, 'Get a quote']);
+    if (o.callback) items.push(['callback', QUICK_ICONS.callback, 'Request a call back']);
+    var close = el('button', 'x', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Hide these buttons');
+    close.addEventListener('click', function () {
+      try { sessionStorage.setItem(quickKey, '1'); } catch (e) { /* hides for this page view only */ }
+      showQuick(false);
+    });
+    quick.appendChild(close);
+    items.forEach(function (item) {
+      var b = el('button', 'pill');
+      b.type = 'button';
+      var ic = el('span', 'ic');
+      ic.innerHTML = item[1];
+      b.appendChild(ic);
+      b.appendChild(document.createTextNode(item[2]));
+      b.addEventListener('click', function () { openTo(item[0]); });
+      quick.appendChild(b);
+    });
+  }
+  function openTo(kind) {
+    if (kind === 'chat') {
+      if (state.session) renderThread();
+      else renderForm('chat');
+    } else {
+      renderForm(kind);
+    }
+    toggle(true);
+  }
 
   // ---------- Views ----------
   var FORMS = {
@@ -288,6 +354,7 @@
       request('POST', spec.path, payload).then(function (data) {
         state.session = { conversationId: data.conversationId, visitorToken: data.visitorToken };
         saveSession(state.session);
+        buildQuick();
         state.messages = data.messages;
         renderThread(kind);
         connect();
@@ -390,6 +457,7 @@
     state.session = null;
     state.messages = [];
     saveSession(null);
+    buildQuick();
     renderStart();
   }
 
@@ -413,6 +481,9 @@
     panel.style[side] = Math.min(x, 16) + 'px';
     if (window.innerWidth > 480) panel.style[side] = x + 'px';
     panel.style.bottom = (y + 72) + 'px';
+    quick.classList.add(side);
+    quick.style[side] = x + 'px';
+    quick.style.bottom = (y + 72) + 'px';
     panel.style.maxHeight = 'calc(100vh - ' + (y + 100) + 'px)';
   }
 
@@ -427,6 +498,8 @@
     document.body.appendChild(host);
 
     state.session = loadSession();
+    buildQuick();
+    setTimeout(function () { showQuick(!state.open); }, 1200);
     if (!state.session) return renderStart();
     request('GET', '/conversations/' + state.session.conversationId + '/messages')
       .then(function (data) {
