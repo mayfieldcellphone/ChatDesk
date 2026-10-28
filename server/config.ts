@@ -12,6 +12,7 @@ export const MANAGED_KEYS = [
   { name: 'META_VERIFY_TOKEN', group: 'Facebook & Instagram', secret: false },
   { name: 'GOOGLE_CLIENT_ID', group: 'Google Business Profile', secret: false },
   { name: 'GOOGLE_CLIENT_SECRET', group: 'Google Business Profile', secret: true },
+  { name: 'GOOGLE_REDIRECT_URI', group: 'Google Business Profile', secret: false },
   { name: 'TWILIO_ACCOUNT_SID', group: 'Twilio (texts & calls)', secret: false },
   { name: 'TWILIO_AUTH_TOKEN', group: 'Twilio (texts & calls)', secret: true },
   { name: 'ANTHROPIC_API_KEY', group: 'AI replies (Anthropic)', secret: true },

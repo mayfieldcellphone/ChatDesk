@@ -87,16 +87,17 @@ export async function emailReviewAlert(business: Business, reviews: Review[]) {
   const low = reviews.some((r) => r.rating > 0 && r.rating <= 3);
   const subject =
     reviews.length === 1
-      ? `${low ? 'Needs attention: ' : ''}New ${reviews[0].rating}-star Google review from ${reviews[0].author_name.replace(/[\r\n]+/g, ' ')}`
-      : `${reviews.length} new Google reviews${low ? ' (including a low rating)' : ''}`;
+      ? `${low ? '⚠️ URGENT (Low Rating): ' : ''}New ${reviews[0].rating}-star Google review from ${reviews[0].author_name.replace(/[\r\n]+/g, ' ')}`
+      : `${reviews.length} new Google reviews${low ? ' (⚠️ URGENT: includes 1–3 star ratings needing attention)' : ''}`;
   const lines = reviews.map((r) => `${stars(r.rating)}  ${r.author_name}\n${r.comment || '(no comment, rating only)'}`);
   const link = process.env.PUBLIC_URL ? `\n\nReply in ChatBird: ${process.env.PUBLIC_URL.replace(/\/$/, '')}/?view=reviews` : '';
+  const urgentNotice = low ? '⚠️ ATTENTION: A review with 3 stars or lower was received. Customer recovery or prompt response recommended.\n\n' : '';
 
   await mailer.sendMail({
     from: config('SMTP_FROM'),
     to: recipients.map((r) => r.email),
     subject,
-    text: `${business.name} has new reviews on Google:\n\n${lines.join('\n\n')}${link}\n\nTurn these emails off in Settings.`,
+    text: `${urgentNotice}${business.name} has new reviews on Google:\n\n${lines.join('\n\n')}${link}\n\nTurn these emails off in Settings.`,
   });
 }
 

@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { readSession, requireAuth, signOAuthState, verifyOAuthState } from './auth';
 import { all, get, run, type Business, type Connection, type Review } from './db';
 import { aiConfigured, AiError, suggestReviewReply } from './ai';
-import { connectGoogleLocations, googleAuthUrl, googleConfigured, replyToReview, reviewLink, syncReviews } from './google';
+import { connectGoogleLocations, googleAuthUrl, googleConfigured, googleRedirectUri, replyToReview, reviewLink, syncReviews } from './google';
 import { connectMetaAccounts, disconnectMeta, metaAuthUrl, metaConfigured } from './meta';
 import { rateLimit } from './rateLimit';
 import { publicUrl, smsConfigured } from './twilio';
@@ -10,7 +10,8 @@ import { configStatus, isAdmin, MANAGED_KEYS, saveConfig } from './config';
 
 export const integrationsRouter = Router();
 
-const redirectUri = (provider: 'google' | 'meta') => `${publicUrl()}/api/integrations/${provider}/callback`;
+const redirectUri = (provider: 'google' | 'meta') =>
+  provider === 'google' ? googleRedirectUri() : `${publicUrl()}/api/integrations/${provider}/callback`;
 
 /** Back to the Integrations page with a message, after the provider's sign-in. */
 function finish(res: Response, outcome: { ok: true; names: string[] } | { ok: false; error: string }) {
@@ -156,26 +157,77 @@ const publicReview = (r: Review & { location: string }) => ({
 reviewsRouter.get('/', (req, res) => {
   const { businessId } = req.session!;
   const filter = String(req.query.filter ?? 'all');
-  const where =
-    filter === 'unreplied' ? 'AND r.reply IS NULL' : filter === 'low' ? 'AND r.rating BETWEEN 1 AND 3' : '';
+  const location = req.query.location ? String(req.query.location).trim() : 'all';
+
+  let filterSql = '';
+  if (filter === 'unreplied') filterSql = 'AND r.reply IS NULL';
+  else if (filter === 'replied') filterSql = 'AND r.reply IS NOT NULL';
+  else if (filter === 'low') filterSql = 'AND r.rating BETWEEN 1 AND 3';
+
+  let locationSql = '';
+  const params: (string | number)[] = [businessId];
+  if (location && location !== 'all') {
+    locationSql = 'AND (c.name = ? OR c.id = ?)';
+    params.push(location, location);
+  }
+
   const reviews = all<Review & { location: string }>(
     `SELECT r.*, c.name AS location FROM reviews r JOIN connections c ON c.id = r.connection_id
-      WHERE r.business_id = ? ${where} ORDER BY r.review_updated_at DESC LIMIT 300`,
-    businessId,
+      WHERE r.business_id = ? ${filterSql} ${locationSql} ORDER BY r.review_updated_at DESC LIMIT 300`,
+    ...params,
   );
+
   const summary = get<{ count: number; average: number | null; unreplied: number; unseen: number }>(
     `SELECT COUNT(*) AS count, AVG(NULLIF(rating, 0)) AS average,
             SUM(CASE WHEN reply IS NULL THEN 1 ELSE 0 END) AS unreplied, SUM(CASE WHEN seen = 0 THEN 1 ELSE 0 END) AS unseen
        FROM reviews WHERE business_id = ?`,
     businessId,
   )!;
+
+  const googleConnections = all<Connection>(
+    "SELECT * FROM connections WHERE business_id = ? AND provider = 'google' ORDER BY name",
+    businessId,
+  );
+
   const business = get<Business>('SELECT * FROM businesses WHERE id = ?', businessId)!;
   res.json({
     reviews: reviews.map(publicReview),
+    locations: googleConnections.map((c) => ({
+      id: c.id,
+      name: c.name,
+      lastSyncedAt: c.last_synced_at,
+      lastError: c.last_error,
+    })),
+    reconnectRequired: googleConnections.some((c) => c.last_error?.toLowerCase().includes('reconnect google')),
     summary: { count: summary.count, average: summary.average, unreplied: summary.unreplied ?? 0, unseen: summary.unseen ?? 0 },
     reviewLink: reviewLink(business),
     aiAvailable: aiConfigured(),
   });
+});
+
+reviewsRouter.post('/sync', rateLimit('review-sync', 15, 10 * 60 * 1000), async (req, res) => {
+  const { businessId } = req.session!;
+  const connections = all<Connection>(
+    "SELECT * FROM connections WHERE business_id = ? AND provider = 'google'",
+    businessId,
+  );
+  if (connections.length === 0) {
+    return res.status(400).json({ error: 'No Google Business Profile locations connected yet. Connect Google under Integrations first.' });
+  }
+  let totalAdded = 0;
+  const errors: string[] = [];
+  for (const c of connections) {
+    try {
+      const added = await syncReviews(c);
+      totalAdded += added;
+    } catch (err) {
+      errors.push(`${c.name}: ${(err as Error).message}`);
+    }
+  }
+  if (errors.length > 0 && totalAdded === 0) {
+    return res.status(502).json({ error: errors.join('; ') });
+  }
+  res.json({ ok: true, added: totalAdded, synced: connections.length });
 });
 
 reviewsRouter.post('/seen', (req, res) => {
