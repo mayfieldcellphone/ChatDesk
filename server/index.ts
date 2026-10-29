@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import path from 'node:path';
-import { authRouter } from './auth';
+import { authRouter, readSession, signOAuthState, verifyOAuthState } from './auth';
 import { inboxRouter } from './inbox';
 import { integrationsRouter, reviewsRouter } from './integrations';
 import { metaWebhookRouter } from './meta';
-import { startReviewSync } from './google';
+import { connectGoogleLocations, googleAuthUrl, googleRedirectUri, startReviewSync, syncReviews } from './google';
 import { smsRouter } from './sms';
 import { voiceRouter } from './voice';
 import { widgetRouter } from './widget';
@@ -13,12 +13,46 @@ import { leadsRouter } from './leads';
 import { reportsRouter, startWeeklyReports } from './reports';
 import { marketingRouter, startCampaigns, unsubscribeRouter } from './campaigns';
 import { attachReceptionist, receptionistRouter } from './receptionist';
+import { all, type Connection } from './db';
 
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
+
+// Google Business Profile OAuth routes (exact paths specified in requirements)
+app.get('/api/google/connect', (req, res) => {
+  // Only a signed-in owner can connect Google to their own business.
+  const session = readSession(req);
+  if (!session) return res.redirect('/?error=' + encodeURIComponent('Please sign in to ChatBird first.'));
+  const state = signOAuthState({ provider: 'google', businessId: session.businessId, userId: session.userId });
+  const redirectUri = googleRedirectUri();
+  res.redirect(googleAuthUrl(redirectUri, state));
+});
+
+app.get('/api/google/callback', async (req, res) => {
+  const state = verifyOAuthState(String(req.query.state ?? ''));
+  // The person finishing sign-in must be the one who started it (as on the Integrations page).
+  if (!state || state.provider !== 'google' || readSession(req)?.userId !== state.userId) {
+    return res.redirect('/?view=integrations&error=' + encodeURIComponent('That sign-in link expired. Try connecting again.'));
+  }
+  if (req.query.error) {
+    return res.redirect('/?view=integrations&error=' + encodeURIComponent(`Google sign-in was cancelled: ${req.query.error}`));
+  }
+  try {
+    const code = String(req.query.code ?? '');
+    const names = await connectGoogleLocations(state.businessId, code, googleRedirectUri());
+    // Immediately pull reviews so Reviews tab is populated
+    for (const c of all<Connection>("SELECT * FROM connections WHERE business_id = ? AND provider = 'google'", state.businessId)) {
+      syncReviews(c).catch((err) => console.error('Initial review sync failed:', (err as Error).message));
+    }
+    res.redirect(`/?view=reviews&connected=${encodeURIComponent(names.join(', '))}`);
+  } catch (err) {
+    console.error('Google callback error:', err);
+    res.redirect(`/?view=integrations&error=${encodeURIComponent((err as Error).message)}`);
+  }
+});
 
 // Twilio posts form-encoded bodies; these routers parse their own.
 app.use('/api/sms', smsRouter);

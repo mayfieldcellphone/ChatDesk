@@ -16,6 +16,7 @@ const HELP: Record<string, string> = {
   META_VERIFY_TOKEN: 'Any random text; enter the same in the Meta webhook settings',
   GOOGLE_CLIENT_ID: 'Google Cloud → Credentials → OAuth client ID',
   GOOGLE_CLIENT_SECRET: 'Google Cloud → Credentials → Client secret',
+  GOOGLE_REDIRECT_URI: 'Authorized redirect URI in Google Cloud Console, e.g. https://chatdesk.31-97-66-240.sslip.io/api/google/callback',
   TWILIO_ACCOUNT_SID: 'Twilio Console home → Account Info (starts with AC)',
   TWILIO_AUTH_TOKEN: 'Twilio Console home → Account Info → Auth Token',
   ANTHROPIC_API_KEY: 'console.anthropic.com → API Keys (starts with sk-ant-)',

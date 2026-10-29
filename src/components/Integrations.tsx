@@ -84,7 +84,7 @@ export default function Integrations({ notice, onOpenSettings, isAdmin, business
   const list = (provider: Connection['provider']) => status.connections.filter((c) => c.provider === provider);
   const connectButton = (provider: 'google' | 'meta', label: string, available: boolean) => (
     <a
-      href={available ? `/api/integrations/${provider}/start` : undefined}
+      href={available ? (provider === 'google' ? '/api/google/connect' : `/api/integrations/${provider}/start`) : undefined}
       aria-disabled={!available}
       className={`inline-block rounded-md px-4 py-2 text-sm font-semibold text-white ${available ? 'bg-blue-600 hover:bg-blue-700' : 'cursor-not-allowed bg-slate-300'}`}
     >
@@ -99,7 +99,14 @@ export default function Integrations({ notice, onOpenSettings, isAdmin, business
             <span className="h-2 w-2 rounded-full bg-green-500" />
             <span className="font-medium">{c.name}</span>
             {canSync && <span className="text-xs text-slate-400">{!c.lastSyncedAt ? 'syncing…' : timeAgo(c.lastSyncedAt) === 'now' ? 'synced just now' : `synced ${timeAgo(c.lastSyncedAt)} ago`}</span>}
-            {c.lastError && <span className="w-full text-xs text-red-600">⚠ {c.lastError}</span>}
+            {c.lastError && (
+              <span className="w-full text-xs text-red-600 flex items-center gap-2">
+                <span>⚠ {c.lastError}</span>
+                {c.provider === 'google' && c.lastError.toLowerCase().includes('reconnect google') && (
+                  <a href="/api/google/connect" className="font-semibold underline text-blue-600 hover:text-blue-800">Reconnect Google</a>
+                )}
+              </span>
+            )}
             <span className="ml-auto flex gap-3">
               {canSync && (
                 <button onClick={() => sync(c)} disabled={busy === c.id} className="text-blue-600 hover:underline disabled:opacity-50">
