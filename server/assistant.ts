@@ -42,14 +42,19 @@ const SCHEMA = {
 };
 
 /** Asks Claude for the next message, or for a handoff when the FAQs and notes don't cover it. */
-export async function decide(business: Business, contactName: string, history: Pick<Message, 'direction' | 'body' | 'automated'>[]): Promise<Decision> {
+/** The business's notes and finished FAQs, as the assistant and the phone receptionist read them. */
+export function businessKnowledge(business: Business) {
   const faqs = usableFaqs(business.id);
-  const knowledge = [
+  return [
     business.ai_notes.trim() && `<notes>\n${business.ai_notes.trim()}\n</notes>`,
     faqs.length > 0 && `<faqs>\n${faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n')}\n</faqs>`,
   ]
     .filter(Boolean)
     .join('\n\n');
+}
+
+export async function decide(business: Business, contactName: string, history: Pick<Message, 'direction' | 'body' | 'automated'>[]): Promise<Decision> {
+  const knowledge = businessKnowledge(business);
   const { day, time } = localTime(business.timezone);
   const status = business.hours_enabled ? (isOpen(business) ? 'open now' : 'closed now') : 'opening hours not set in ChatBird';
 
@@ -188,11 +193,14 @@ async function handle(businessId: string, conversationId: string, messageId: str
 }
 
 /** Puts the "Needs reply" tag on the conversation, creating the tag the first time. */
-function tagNeedsReply(businessId: string, conversationId: string) {
-  let tag = get<{ id: string }>('SELECT id FROM tags WHERE business_id = ? AND name = ? COLLATE NOCASE', businessId, NEEDS_REPLY_TAG.name);
+const tagNeedsReply = (businessId: string, conversationId: string) => tagConversation(businessId, conversationId, NEEDS_REPLY_TAG);
+
+/** Puts a tag on the conversation, creating the tag the first time. */
+export function tagConversation(businessId: string, conversationId: string, label: { name: string; color: string }) {
+  let tag = get<{ id: string }>('SELECT id FROM tags WHERE business_id = ? AND name = ? COLLATE NOCASE', businessId, label.name);
   if (!tag) {
     tag = { id: newId() };
-    run('INSERT INTO tags (id, business_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)', tag.id, businessId, NEEDS_REPLY_TAG.name, NEEDS_REPLY_TAG.color, now());
+    run('INSERT INTO tags (id, business_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)', tag.id, businessId, label.name, label.color, now());
     publish(`biz:${businessId}`, { type: 'tags' });
   }
   run('INSERT OR IGNORE INTO conversation_tags (conversation_id, tag_id, created_at) VALUES (?, ?, ?)', conversationId, tag.id, now());

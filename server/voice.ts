@@ -4,6 +4,7 @@ import {
   type Business, type Call, type Contact, type Conversation, type Message,
 } from './db';
 import { publish } from './events';
+import { formatDuration, loadCall, publishUpdated, refreshCallMessage } from './calls';
 import { isOpen } from './hours';
 import { onInboundMessage, pushMessage } from './inbound';
 import { emailTeam } from './notify';
@@ -11,6 +12,7 @@ import { phoneConversation } from './phone';
 import { replyChannels, sendToCustomer } from './outbound';
 import { publicUrl, twiml, verifyTwilio } from './twilio';
 import { transcribeVoicemail, transcriptionConfigured } from './transcribe';
+import { receptionistAvailable, relayTwiml } from './receptionist';
 
 // Twilio Voice webhooks. Point the number's "A call comes in" at /api/voice/incoming and
 // "Call status changes" at /api/voice/status. The other URLs are handed to Twilio in the TwiML below.
@@ -20,36 +22,17 @@ voiceRouter.use(express.urlencoded({ extended: false }), verifyTwilio);
 const MISSED_TEXT_REPEAT_MS = 60 * 60 * 1000;
 const VOICEMAIL_GRACE_MS = Number(process.env.VOICEMAIL_GRACE_MS) || 30_000;
 const sendTwiml = (res: Response, xml: string) => res.type('text/xml').send(xml);
-const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-function callSummary(call: Pick<Call, 'status' | 'has_voicemail' | 'duration'>) {
-  if (call.status === 'answered') return `Answered call${call.duration ? ` · ${formatDuration(call.duration)}` : ''}`;
-  if (call.status === 'missed') return call.has_voicemail ? 'Missed call · left a voicemail' : 'Missed call';
-  return 'Incoming call…';
-}
-
-function publishUpdated(businessId: string, conversationId: string, messageId: string) {
-  const message = get<Message>('SELECT * FROM messages WHERE id = ?', messageId);
-  if (message) publish(`biz:${businessId}`, { type: 'message-updated', conversationId, message: { ...message, author_name: null } });
-}
-
-/** Rewrites the call's line in the conversation timeline to match its current status. */
-function refreshCallMessage(call: Call) {
-  if (!call.message_id) return;
-  run('UPDATE messages SET body = ?, duration = ? WHERE id = ?', callSummary(call), call.duration, call.message_id);
-  publishUpdated(call.business_id, call.conversation_id, call.message_id);
-}
-
-const loadCall = (callSid: string | undefined) => (callSid ? get<Call>('SELECT * FROM calls WHERE call_sid = ?', callSid) : undefined);
-
-function voicemailTwiml(business: Business) {
+/** The voicemail greeting and recording. `lead` is said first, e.g. after a transfer nobody answered. */
+function voicemailTwiml(business: Business, lead = '') {
+  const greeting = `${lead} ${business.voicemail_greeting}`.trim();
   const base = publicUrl();
   // With an OpenAI key, ChatBird transcribes the recording itself (see /recording), so Twilio's
   // weaker (and separately billed) transcription is skipped.
   if (transcriptionConfigured()) {
-    return twiml`<Say>${business.voicemail_greeting}</Say><Record maxLength="120" timeout="5" playBeep="true" trim="trim-silence" action="${base}/api/voice/voicemail-done" recordingStatusCallback="${base}/api/voice/recording"/><Say>We didn't get a message. Goodbye.</Say>`;
+    return twiml`<Say>${greeting}</Say><Record maxLength="120" timeout="5" playBeep="true" trim="trim-silence" action="${base}/api/voice/voicemail-done" recordingStatusCallback="${base}/api/voice/recording"/><Say>We didn't get a message. Goodbye.</Say>`;
   }
-  return twiml`<Say>${business.voicemail_greeting}</Say><Record maxLength="120" timeout="5" playBeep="true" trim="trim-silence" action="${base}/api/voice/voicemail-done" recordingStatusCallback="${base}/api/voice/recording" transcribe="true" transcribeCallback="${base}/api/voice/transcription"/><Say>We didn't get a message. Goodbye.</Say>`;
+  return twiml`<Say>${greeting}</Say><Record maxLength="120" timeout="5" playBeep="true" trim="trim-silence" action="${base}/api/voice/voicemail-done" recordingStatusCallback="${base}/api/voice/recording" transcribe="true" transcribeCallback="${base}/api/voice/transcription"/><Say>We didn't get a message. Goodbye.</Say>`;
 }
 
 /** Transcribes a voicemail with OpenAI and puts the text on its message; the audio stays either way. */
@@ -83,6 +66,13 @@ voiceRouter.post('/incoming', (req, res) => {
     publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: { ...message, author_name: null } });
   }
 
+  // The AI receptionist answers every call, or outside opening hours (see Settings → AI receptionist).
+  const ai = receptionistAvailable(business, from);
+  const mode = business.receptionist_mode;
+  if (ai && (mode === 'always' || ((mode === 'after_hours' || mode === 'no_answer') && !isOpen(business)))) {
+    return sendTwiml(res, relayTwiml(business, params.CallSid));
+  }
+
   // Ring the shop first during opening hours; the caller hears ringing until someone answers.
   if (business.forward_number && business.forward_number !== from && isOpen(business)) {
     return sendTwiml(
@@ -90,7 +80,7 @@ voiceRouter.post('/incoming', (req, res) => {
       twiml`<Dial timeout="${business.ring_seconds}" answerOnBridge="true" action="${publicUrl()}/api/voice/dial-status"><Number>${business.forward_number}</Number></Dial>`,
     );
   }
-  sendTwiml(res, voicemailTwiml(business));
+  sendTwiml(res, ai && mode === 'no_answer' ? relayTwiml(business, params.CallSid) : voicemailTwiml(business));
 });
 
 voiceRouter.post('/dial-status', (req, res) => {
@@ -106,8 +96,43 @@ voiceRouter.post('/dial-status', (req, res) => {
     refreshCallMessage(call);
     return sendTwiml(res, twiml`<Hangup/>`);
   }
-  // Nobody picked up (or the line was busy): take a voicemail instead.
+  // Nobody picked up (or the line was busy): the AI receptionist if it's on for that, else voicemail.
+  const from = get<{ phone: string | null }>('SELECT k.phone FROM conversations v JOIN contacts k ON k.id = v.contact_id WHERE v.id = ?', call.conversation_id)?.phone ?? null;
+  const ai = business.receptionist_mode === 'no_answer' && receptionistAvailable(business, from);
+  sendTwiml(res, ai ? relayTwiml(business, call.call_sid) : voicemailTwiml(business));
+});
+
+// The AI receptionist's session ended (receptionist.ts sends HandoffData): put the caller through,
+// take a voicemail, or hang up. No HandoffData means the session failed, so fall back to voicemail.
+voiceRouter.post('/relay-done', (req, res) => {
+  const params = req.body as Record<string, string>;
+  const call = loadCall(params.CallSid);
+  const business = call && get<Business>('SELECT * FROM businesses WHERE id = ?', call.business_id);
+  if (!call || !business) return sendTwiml(res, twiml`<Hangup/>`);
+  let handoff: { action?: string; to?: string } = {};
+  try {
+    handoff = JSON.parse(params.HandoffData || '{}');
+  } catch { /* treat as a failed session */ }
+  if (handoff.action === 'hangup') return sendTwiml(res, twiml`<Hangup/>`);
+  const to = normalizePhone(handoff.to);
+  // Only ever the numbers set in Settings, never one taken from the conversation.
+  const allowed = [business.receptionist_handoff_number, business.receptionist_urgent_number].filter(Boolean);
+  if (handoff.action === 'transfer' && to && allowed.includes(to)) {
+    return sendTwiml(
+      res,
+      twiml`<Dial timeout="25" answerOnBridge="true" callerId="${business.sms_number ?? ''}" action="${publicUrl()}/api/voice/transfer-done"><Number>${to}</Number></Dial>`,
+    );
+  }
+  if (!handoff.action) console.error(`Receptionist session for ${business.name} ended without a handoff (${params.ErrorCode || 'no error code'}); taking a voicemail`);
   sendTwiml(res, voicemailTwiml(business));
+});
+
+voiceRouter.post('/transfer-done', (req, res) => {
+  const params = req.body as Record<string, string>;
+  const call = loadCall(params.CallSid);
+  const business = call && get<Business>('SELECT * FROM businesses WHERE id = ?', call.business_id);
+  if (!business || params.DialCallStatus === 'completed') return sendTwiml(res, twiml`<Hangup/>`);
+  sendTwiml(res, voicemailTwiml(business, 'Sorry, nobody could take your call just now.'));
 });
 
 voiceRouter.post('/voicemail-done', (_req, res) => {

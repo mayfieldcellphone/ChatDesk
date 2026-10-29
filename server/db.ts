@@ -314,6 +314,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS contacts_email ON contacts(business_id, email);
 `);
 
+// AI phone receptionist (receptionist.ts). Off until switched on; numbers are the owner's to enter.
+addColumn('businesses', 'receptionist_mode', "TEXT NOT NULL DEFAULT 'off'");
+addColumn('businesses', 'receptionist_greeting', "TEXT NOT NULL DEFAULT 'Hi, thanks for calling {business}. I''m the virtual assistant. How can I help?'");
+addColumn('businesses', 'receptionist_voice', "TEXT NOT NULL DEFAULT 'en-AU-Neural2-C'");
+addColumn('businesses', 'receptionist_handoff_number', 'TEXT');
+addColumn('businesses', 'receptionist_urgent_number', 'TEXT');
+addColumn('businesses', 'receptionist_notes', "TEXT NOT NULL DEFAULT ''");
+addColumn('businesses', 'pricing_mode', "TEXT NOT NULL DEFAULT 'off'");
+addColumn('businesses', 'pricing_rules', "TEXT NOT NULL DEFAULT 'Prices are estimates and are confirmed after a technician inspects the device. Never quote water damage or motherboard repairs. Never offer discounts.'");
+addColumn('businesses', 'price_max_age_days', 'INTEGER NOT NULL DEFAULT 60');
+addColumn('calls', 'ai_handled', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('calls', 'ai_outcome', 'TEXT');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS price_list (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    model TEXT NOT NULL,
+    service TEXT NOT NULL,
+    price TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS price_list_business ON price_list(business_id, model);
+`);
+
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
 export interface Business {
@@ -357,6 +381,15 @@ export interface Business {
   assistant_handoff: string;
   weekly_report: number;
   weekly_report_sent_on: string | null;
+  receptionist_mode: 'off' | 'always' | 'after_hours' | 'no_answer';
+  receptionist_greeting: string;
+  receptionist_voice: string;
+  receptionist_handoff_number: string | null;
+  receptionist_urgent_number: string | null;
+  receptionist_notes: string;
+  pricing_mode: 'off' | 'from' | 'exact';
+  pricing_rules: string;
+  price_max_age_days: number;
   created_at: string;
 }
 
@@ -452,6 +485,8 @@ export interface Call {
   ended: number;
   duration: number | null;
   message_id: string | null;
+  ai_handled: number;
+  ai_outcome: string | null;
   created_at: string;
 }
 

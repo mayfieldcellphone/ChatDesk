@@ -12,6 +12,7 @@ import { widgetRouter } from './widget';
 import { leadsRouter } from './leads';
 import { reportsRouter, startWeeklyReports } from './reports';
 import { marketingRouter, startCampaigns, unsubscribeRouter } from './campaigns';
+import { attachReceptionist, receptionistRouter } from './receptionist';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -35,6 +36,7 @@ app.use('/api/integrations', integrationsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/marketing', marketingRouter);
+app.use('/api/receptionist', receptionistRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -69,4 +71,6 @@ startWeeklyReports();
 startCampaigns();
 
 const port = Number(process.env.PORT) || 3000;
-app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));
+const server = app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));
+// Live phone calls with the AI receptionist (Twilio ConversationRelay WebSocket).
+attachReceptionist(server);

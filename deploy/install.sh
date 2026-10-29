@@ -101,6 +101,15 @@ server {
     listen [::]:80;
     server_name $DOMAIN;
     client_max_body_size 10m;
+    # AI phone receptionist: Twilio's live voice connection is a WebSocket.
+    location /api/voice/relay {
+        proxy_pass http://127.0.0.1:3010;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_read_timeout 1h;
+    }
     location / {
         proxy_pass http://127.0.0.1:3010;
         proxy_http_version 1.1;
