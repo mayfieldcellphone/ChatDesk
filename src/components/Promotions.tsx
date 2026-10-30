@@ -226,6 +226,8 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
     footer: [b.name, b.phone].filter(Boolean).join(' · '),
     color: b.color || '#087565',
   });
+  // Until the owner types into the poster boxes, "Write it for me" fills the poster too.
+  const [posterEdited, setPosterEdited] = useState(false);
   const [photo, setPhoto] = useState<HTMLImageElement | null>(null);
   const [own, setOwn] = useState<HTMLImageElement | null>(null);
   const [caption, setCaption] = useState('');
@@ -279,6 +281,7 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
       setIsOffer(!!r.offer);
       if (r.offer) setOffer(r.offer);
       setSource('poster');
+      setPosterEdited(false);
     } catch (err) {
       setStatus({ ok: false, text: (err as Error).message });
     } finally {
@@ -287,6 +290,7 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
   };
 
   const writeCaption = async () => {
+    if (idea.trim() && !posterEdited) return fillAll();
     setBusy('caption');
     setStatus(null);
     try {
@@ -384,15 +388,15 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
               </div>
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">Big text</span>
-                <input className={input} value={poster.big} maxLength={30} onChange={(e) => setPoster({ ...poster, big: e.target.value })} />
+                <input className={input} value={poster.big} maxLength={30} onChange={(e) => (setPoster({ ...poster, big: e.target.value }), setPosterEdited(true))} />
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">Headline</span>
-                <input className={input} value={poster.headline} maxLength={60} onChange={(e) => setPoster({ ...poster, headline: e.target.value })} />
+                <input className={input} value={poster.headline} maxLength={60} onChange={(e) => (setPoster({ ...poster, headline: e.target.value }), setPosterEdited(true))} />
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">Details</span>
-                <input className={input} value={poster.details} maxLength={90} onChange={(e) => setPoster({ ...poster, details: e.target.value })} />
+                <input className={input} value={poster.details} maxLength={90} onChange={(e) => (setPoster({ ...poster, details: e.target.value }), setPosterEdited(true))} />
               </label>
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">Bottom line</span>
