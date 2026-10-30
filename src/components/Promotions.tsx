@@ -45,7 +45,45 @@ const STYLES: { value: Style; label: string }[] = [
 /** Colours that work with white text; "Mix it up" picks from these. */
 const MIX_COLOURS = ['#087565', '#1E3352', '#C2410C', '#B91C1C', '#6D28D9', '#0369A1', '#BE185D', '#15803D', '#111827'];
 
+/** Repair symbols, drawn as lines on a 100×100 grid (the same paths show on the picker buttons). */
+const ICONS = {
+  phone: { label: 'Phone', d: 'M34 8h32a8 8 0 0 1 8 8v68a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z M44 16h12 M47 82h6' },
+  screen: { label: 'Screen', d: 'M34 8h32a8 8 0 0 1 8 8v68a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z M40 24l10 16-8 8 12 16-4 12 M50 40l12-4 M42 48l-10 6' },
+  back: { label: 'Back glass', d: 'M34 8h32a8 8 0 0 1 8 8v68a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z M37 16h12a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H37a5 5 0 0 1-5-5V21a5 5 0 0 1 5-5z M39 24a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M39 33a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M58 70l8-8 M58 80l14-14' },
+  battery: { label: 'Battery', d: 'M14 32h64a6 6 0 0 1 6 6v24a6 6 0 0 1-6 6H14a6 6 0 0 1-6-6V38a6 6 0 0 1 6-6z M84 42h6v16h-6 M50 36l-10 15h14l-10 15' },
+  port: { label: 'Charging port', d: 'M28 22h44a10 10 0 0 1 0 20H28a10 10 0 0 1 0-20z M38 32h24 M44 42v12h12V42 M50 54v8 M40 62h20v8a10 10 0 0 1-20 0z M50 80v14' },
+  water: { label: 'Water damage', d: 'M50 10C50 10 22 44 22 62a28 28 0 0 0 56 0C78 44 50 10 50 10z M36 64a14 14 0 0 0 14 14' },
+  camera: { label: 'Camera', d: 'M18 30h14l6-10h24l6 10h14a6 6 0 0 1 6 6v40a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V36a6 6 0 0 1 6-6z M36 56a14 14 0 1 0 28 0a14 14 0 1 0-28 0' },
+  tablet: { label: 'Tablet', d: 'M22 10h56a8 8 0 0 1 8 8v64a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8V18a8 8 0 0 1 8-8z M46 82h8' },
+  tools: { label: 'Tools', d: 'M66 10a20 20 0 0 0-19 27L14 70a8 8 0 0 0 12 12l33-33a20 20 0 0 0 27-19l-11 11-11-2-2-11z' },
+} as const;
+type Icon = keyof typeof ICONS | 'none';
+
+/** Draws a symbol in a round badge centred on (x, y). */
+function drawIcon(ctx: CanvasRenderingContext2D, icon: Icon, x: number, y: number, r: number, fill: string, ink: string) {
+  if (icon === 'none') return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.arc(x + 4, y + 8, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  const scale = (r * 1.25) / 100;
+  ctx.translate(x - 50 * scale, y - 50 * scale);
+  ctx.scale(scale, scale);
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 7;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke(new Path2D(ICONS[icon].d));
+  ctx.restore();
+}
+
 interface Poster {
+  icon: Icon;
   style: Style;
   headline: string;
   big: string;
@@ -191,7 +229,7 @@ function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElemen
   } else if (p.style === 'ribbon') {
     // Cream background, headline on top, the big text on a tilted colour ribbon, details below.
     ctx.fillStyle = '#0F1E36';
-    const head = fitLines(ctx, p.headline, 800, 76, 36, width, 2);
+    const head = fitLines(ctx, p.headline, 800, 76, 36, p.icon === 'none' ? width : 580, 2);
     drawLines(ctx, head.lines, SIZE / 2, 150, head.size);
     ctx.save();
     ctx.translate(SIZE / 2, 510);
@@ -269,8 +307,10 @@ function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElemen
     for (let i = 0; i < 5; i++)
       for (let j = 0; j < 5 - i; j++) {
         ctx.beginPath();
-        ctx.moveTo(116 + i * 30, 110 + j * 30);
-        ctx.arc(110 + i * 30, 110 + j * 30, 6, 0, Math.PI * 2);
+        if (p.icon === 'none') {
+          ctx.moveTo(116 + i * 30, 110 + j * 30);
+          ctx.arc(110 + i * 30, 110 + j * 30, 6, 0, Math.PI * 2);
+        }
         ctx.moveTo(SIZE - 104 - i * 30, 110 + j * 30);
         ctx.arc(SIZE - 110 - i * 30, 110 + j * 30, 6, 0, Math.PI * 2);
         ctx.fill();
@@ -298,6 +338,13 @@ function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElemen
     const det = fitLines(ctx, p.details, 600, 42, 26, width, 2);
     drawLines(ctx, det.lines, SIZE / 2, y + 20, det.size, 1.25);
   }
+
+  // Repair picture badge: top left, or top right where the price tag sits.
+  const light = p.style === 'ribbon' || p.style === 'frame';
+  const ink = p.style === 'burst' || p.style === 'tag' ? '#0F1E36' : p.color;
+  if (p.style === 'tag') drawIcon(ctx, p.icon, SIZE - 140, 135, 88, '#FFFFFF', ink);
+  else if (p.style === 'frame') drawIcon(ctx, p.icon, 165, 165, 75, p.color, '#FFFFFF');
+  else drawIcon(ctx, p.icon, 140, 140, 98, light ? p.color : '#FFFFFF', light ? '#FFFFFF' : ink);
 
   // Footer strip: business and phone.
   ctx.fillStyle = '#FFFFFF';
@@ -369,6 +416,7 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
   const [source, setSource] = useState<'poster' | 'own'>('poster');
   const [poster, setPoster] = useState<Poster>({
     style: 'bold',
+    icon: 'phone',
     headline: 'iPhone 14 screen repair',
     big: '25% OFF',
     details: 'This weekend only · walk in, done while you wait',
@@ -431,9 +479,9 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
     setBusy('fill');
     setStatus(null);
     try {
-      const r = await api<{ big: string; headline: string; details: string; caption: string; offer: typeof offer | null }>('/posts/draft', { method: 'POST', body: { idea } });
+      const r = await api<{ big: string; headline: string; details: string; icon: Icon; caption: string; offer: typeof offer | null }>('/posts/draft', { method: 'POST', body: { idea } });
       // A fresh look each time, so posts don't all look the same.
-      setPoster((p) => mixed({ ...p, big: r.big || p.big, headline: r.headline || p.headline, details: r.details }));
+      setPoster((p) => mixed({ ...p, icon: r.icon in ICONS ? r.icon : p.icon, big: r.big || p.big, headline: r.headline || p.headline, details: r.details }));
       setCaption(r.caption);
       setIsOffer(!!r.offer);
       if (r.offer) setOffer(r.offer);
@@ -546,6 +594,29 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
               <button type="button" onClick={() => setPoster(mixed(poster))} className="w-full rounded-md border border-dashed border-slate-400 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
                 🎲 Mix it up (new layout and colour)
               </button>
+              <div className="text-sm">
+                <span className="mb-1 block font-medium">Picture</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(['none', ...Object.keys(ICONS)] as Icon[]).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      title={k === 'none' ? 'No picture' : ICONS[k].label}
+                      aria-label={k === 'none' ? 'No picture' : ICONS[k].label}
+                      onClick={() => setPoster({ ...poster, icon: k })}
+                      className={`flex h-10 w-10 items-center justify-center rounded-md border ${poster.icon === k ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-300 text-slate-600'}`}
+                    >
+                      {k === 'none' ? (
+                        <span className="text-xs">None</span>
+                      ) : (
+                        <svg viewBox="0 0 100 100" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={6} strokeLinecap="round" strokeLinejoin="round">
+                          <path d={ICONS[k].d} />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">Big text</span>
                 <input className={input} value={poster.big} maxLength={30} onChange={(e) => (setPoster({ ...poster, big: e.target.value }), setPosterEdited(true))} />

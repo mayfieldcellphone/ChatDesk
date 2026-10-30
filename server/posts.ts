@@ -126,6 +126,7 @@ const DRAFT_SCHEMA = {
     big: { type: 'string', description: 'The poster’s big text, at most 14 characters, e.g. "25% OFF" or "$99"' },
     headline: { type: 'string', description: 'What it is, at most 45 characters, e.g. "iPhone back glass replacement"' },
     details: { type: 'string', description: 'One supporting line, at most 70 characters, e.g. "iPhone X to iPhone 15 · while you wait"' },
+    icon: { type: 'string', enum: ['phone', 'screen', 'back', 'battery', 'port', 'water', 'camera', 'tablet', 'tools'], description: 'The picture that best fits the repair: screen (cracked screen), back (back glass), battery, port (charging port), water (water damage), camera, tablet (iPad), tools (general repair), phone (anything else)' },
     caption: { type: 'string', description: 'The social media post text' },
     isOffer: { type: 'boolean', description: 'True if it is a discount, deal or limited-time offer' },
     offerTitle: { type: 'string', description: 'Offer title for Google, at most 58 characters' },
@@ -133,7 +134,7 @@ const DRAFT_SCHEMA = {
     end: { type: 'string', description: 'Offer end date, YYYY-MM-DD' },
     terms: { type: 'string', description: 'Short offer conditions taken from the brief, or empty' },
   },
-  required: ['big', 'headline', 'details', 'caption', 'isOffer', 'offerTitle', 'start', 'end', 'terms'],
+  required: ['big', 'headline', 'details', 'icon', 'caption', 'isOffer', 'offerTitle', 'start', 'end', 'terms'],
   additionalProperties: false,
 };
 
@@ -176,6 +177,7 @@ ${business.ai_notes.trim() ? `\nAbout the business:\n${business.ai_notes.trim()}
       big: str('big', 30),
       headline: str('headline', 60),
       details: str('details', 90),
+      icon: str('icon', 20),
       caption: str('caption', 2000),
       offer: d.isOffer ? { title: str('offerTitle', 58), start, end, terms: str('terms', 1500) } : null,
     });
