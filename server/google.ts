@@ -2,6 +2,7 @@ import { decrypt, encrypt } from './crypto';
 import { all, get, newId, now, run, type Business, type Connection, type Review } from './db';
 import { publish } from './events';
 import { emailReviewAlert } from './notify';
+import { handleNewReviews } from './reviewReplies';
 import { pushToBusiness } from './push';
 import { config } from './config';
 import { publicUrl } from './twilio';
@@ -275,6 +276,7 @@ export async function syncReviews(connection: Connection) {
   if (added.length > 0) {
     publish(`biz:${business.id}`, { type: 'review', count: added.length });
     emailReviewAlert(business, added).catch((err) => console.error('Review email failed:', err));
+    handleNewReviews(business, added).catch((err) => console.error('Review replies failed:', err));
     const first = added[0];
     const hasLowRating = added.some((r) => r.rating > 0 && r.rating <= 3);
     pushToBusiness(business.id, {

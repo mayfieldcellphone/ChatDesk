@@ -338,6 +338,15 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS price_list_business ON price_list(business_id, model);
 `);
 
+// Automatic Google review replies (reviewReplies.ts). Off until switched on; only reviews left after
+// switching on are ever answered, and a review that already has a reply is never touched.
+addColumn('businesses', 'review_reply_mode', "TEXT NOT NULL DEFAULT 'off'");
+addColumn('businesses', 'review_reply_since', 'TEXT');
+addColumn('businesses', 'review_reply_notes', "TEXT NOT NULL DEFAULT ''");
+addColumn('reviews', 'ai_draft', 'TEXT');
+addColumn('reviews', 'auto_replied', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('reviews', 'reply_error', 'TEXT');
+
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
 export interface Business {
@@ -381,6 +390,9 @@ export interface Business {
   assistant_handoff: string;
   weekly_report: number;
   weekly_report_sent_on: string | null;
+  review_reply_mode: 'off' | 'draft' | 'positive' | 'all';
+  review_reply_since: string | null;
+  review_reply_notes: string;
   receptionist_mode: 'off' | 'always' | 'after_hours' | 'no_answer';
   receptionist_greeting: string;
   receptionist_voice: string;
@@ -469,6 +481,9 @@ export interface Review {
   review_created_at: string;
   review_updated_at: string;
   seen: number;
+  ai_draft?: string | null;
+  auto_replied?: number;
+  reply_error?: string | null;
   created_at: string;
 }
 

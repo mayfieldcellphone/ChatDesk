@@ -11,6 +11,9 @@ interface Review {
   reply: string | null;
   createdAt: string;
   seen: boolean;
+  aiDraft: string | null;
+  autoReplied: boolean;
+  replyError: string | null;
 }
 
 interface LocationInfo {
@@ -229,6 +232,23 @@ function ReviewCard({ review, aiAvailable, onChanged }: { review: Review; aiAvai
     setBusy(false);
   };
 
+  const approve = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await api(`/reviews/${review.id}/reply`, { method: 'PUT', body: { comment: review.aiDraft } });
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+    setBusy(false);
+  };
+
+  const discard = async () => {
+    await api(`/reviews/${review.id}/draft`, { method: 'DELETE' }).catch((err) => setError(err.message));
+    onChanged();
+  };
+
   const remove = async () => {
     if (!confirm('Delete your reply from Google?')) return;
     setBusy(true);
@@ -260,7 +280,7 @@ function ReviewCard({ review, aiAvailable, onChanged }: { review: Review; aiAvai
 
       {review.reply && draft === null && (
         <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm border border-slate-100">
-          <div className="mb-1 text-xs font-semibold text-slate-500">Your reply on Google</div>
+          <div className="mb-1 text-xs font-semibold text-slate-500">{review.autoReplied ? 'Replied automatically by ChatBird AI' : 'Your reply on Google'}</div>
           <p className="whitespace-pre-wrap text-slate-700">{review.reply}</p>
           <div className="mt-2 flex gap-3 text-xs">
             <button onClick={() => setDraft(review.reply)} className="text-blue-600 hover:underline">Edit reply</button>
@@ -268,6 +288,25 @@ function ReviewCard({ review, aiAvailable, onChanged }: { review: Review; aiAvai
           </div>
         </div>
       )}
+
+      {!review.reply && review.aiDraft && draft === null && (
+        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+          <div className="mb-1 text-xs font-semibold text-blue-800">AI reply ready to approve (not posted yet)</div>
+          <p className="whitespace-pre-wrap text-slate-800">{review.aiDraft}</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+            <button onClick={approve} disabled={busy} className="rounded-md bg-blue-600 px-3 py-1.5 font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+              {busy ? 'Posting…' : 'Approve & post'}
+            </button>
+            <button onClick={() => setDraft(review.aiDraft)} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 font-semibold hover:bg-slate-50">
+              Edit first
+            </button>
+            <button onClick={discard} className="text-slate-500 hover:underline">
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+      {review.replyError && !review.reply && <p className="mt-2 text-xs text-amber-700">Automatic reply didn’t go through: {review.replyError}</p>}
 
       {draft !== null ? (
         <form onSubmit={post} className="mt-3 space-y-2 border-t border-slate-100 pt-3">
@@ -298,7 +337,7 @@ function ReviewCard({ review, aiAvailable, onChanged }: { review: Review; aiAvai
           </div>
         </form>
       ) : (
-        !review.reply && (
+        !review.reply && !review.aiDraft && (
           <div className="mt-3 flex gap-2 text-sm">
             <button onClick={() => setDraft('')} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:bg-slate-50">
               Reply

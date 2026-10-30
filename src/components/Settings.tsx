@@ -4,6 +4,7 @@ import { ColorChoices, TagPill } from './Tags';
 import PushControls from './PushControls';
 import { api, DAYS, TAG_COLORS, type Business, type Day, type Faq, type SavedReply, type Tag, type WeeklyHours } from '../api';
 import ReceptionistSection from './Receptionist';
+import ReviewRepliesSection from './ReviewReplies';
 
 interface Props {
   business: Business;
@@ -85,6 +86,7 @@ export default function Settings(props: Props & { autoImport?: boolean }) {
           <AiSection {...props} />
           <AssistantSection {...props} />
           <FaqSection />
+          <ReviewRepliesSection />
           <ReceptionistSection />
           <NotificationsSection {...props} />
         </div>

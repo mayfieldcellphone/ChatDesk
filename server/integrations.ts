@@ -1,6 +1,6 @@
 import { Router, type Response } from 'express';
 import { readSession, requireAuth, signOAuthState, verifyOAuthState } from './auth';
-import { all, get, run, type Business, type Connection, type Review } from './db';
+import { all, get, now, run, type Business, type Connection, type Review } from './db';
 import { aiConfigured, AiError, suggestReviewReply } from './ai';
 import { connectGoogleLocations, googleAuthUrl, googleConfigured, googleRedirectUri, replyToReview, reviewLink, syncReviews } from './google';
 import { connectMetaAccounts, disconnectMeta, metaAuthUrl, metaConfigured } from './meta';
@@ -152,6 +152,9 @@ const publicReview = (r: Review & { location: string }) => ({
   createdAt: r.review_created_at,
   updatedAt: r.review_updated_at,
   seen: Boolean(r.seen),
+  aiDraft: r.ai_draft ?? null,
+  autoReplied: Boolean(r.auto_replied),
+  replyError: r.reply_error ?? null,
 });
 
 reviewsRouter.get('/', (req, res) => {
@@ -245,10 +248,36 @@ reviewsRouter.put('/:id/reply', async (req, res) => {
   if (comment.length > 4000) return res.status(400).json({ error: 'Google allows replies up to 4,000 characters' });
   try {
     await replyToReview(review, comment);
+    run('UPDATE reviews SET ai_draft = NULL, reply_error = NULL WHERE id = ?', review.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(502).json({ error: `Google didn’t accept the reply: ${(err as Error).message}` });
   }
+});
+
+/** Throws away the AI's draft without replying. */
+reviewsRouter.delete('/:id/draft', (req, res) => {
+  run('UPDATE reviews SET ai_draft = NULL WHERE id = ? AND business_id = ?', req.params.id, req.session!.businessId);
+  res.json({ ok: true });
+});
+
+const REPLY_MODES = ['off', 'draft', 'positive', 'all'] as const;
+
+reviewsRouter.get('/auto-reply', (req, res) => {
+  const b = get<Business>('SELECT * FROM businesses WHERE id = ?', req.session!.businessId)!;
+  const locations = all<{ name: string }>("SELECT name FROM connections WHERE business_id = ? AND provider = 'google' ORDER BY name", b.id).map((c) => c.name);
+  res.json({ mode: b.review_reply_mode, since: b.review_reply_since, notes: b.review_reply_notes, aiAvailable: aiConfigured(), locations });
+});
+
+reviewsRouter.patch('/auto-reply', (req, res) => {
+  const b = get<Business>('SELECT * FROM businesses WHERE id = ?', req.session!.businessId)!;
+  const mode = req.body.mode ?? b.review_reply_mode;
+  if (!REPLY_MODES.includes(mode)) return res.status(400).json({ error: 'Choose how to reply to reviews' });
+  const notes = req.body.notes === undefined ? b.review_reply_notes : String(req.body.notes).trim().slice(0, 1500);
+  // Switching on (from off) starts the clock: reviews left before now are never auto-answered.
+  const since = mode === 'off' ? null : b.review_reply_mode === 'off' || !b.review_reply_since ? now() : b.review_reply_since;
+  run('UPDATE businesses SET review_reply_mode = ?, review_reply_notes = ?, review_reply_since = ? WHERE id = ?', mode, notes, since, b.id);
+  res.json({ mode, notes, since });
 });
 
 reviewsRouter.delete('/:id/reply', async (req, res) => {
@@ -268,7 +297,8 @@ reviewsRouter.post('/:id/suggest', rateLimit('ai-review', 30, 10 * 60 * 1000), a
   const review = loadReview(businessId, req.params.id);
   if (!review) return res.status(404).json({ error: 'Review not found' });
   try {
-    const suggestion = await suggestReviewReply(get<Business>('SELECT * FROM businesses WHERE id = ?', businessId)!, review);
+    const location = get<Connection>('SELECT * FROM connections WHERE id = ?', review.connection_id)?.name ?? '';
+    const suggestion = await suggestReviewReply(get<Business>('SELECT * FROM businesses WHERE id = ?', businessId)!, review, { location });
     res.json({ suggestion });
   } catch (err) {
     if (err instanceof AiError) return res.status(502).json({ error: err.message });
