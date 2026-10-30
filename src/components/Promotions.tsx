@@ -31,12 +31,19 @@ const input = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus
 const PROVIDER: Record<ChannelInfo['provider'], string> = { google: 'Google', facebook: 'Facebook', instagram: 'Instagram' };
 const SIZE = 1080;
 
-type Style = 'bold' | 'burst' | 'photo';
+type Style = 'bold' | 'burst' | 'split' | 'ribbon' | 'glow' | 'tag' | 'frame' | 'photo';
 const STYLES: { value: Style; label: string }[] = [
   { value: 'bold', label: 'Bold' },
   { value: 'burst', label: 'Starburst' },
+  { value: 'split', label: 'Split' },
+  { value: 'ribbon', label: 'Ribbon' },
+  { value: 'glow', label: 'Glow' },
+  { value: 'tag', label: 'Price tag' },
+  { value: 'frame', label: 'Frame' },
   { value: 'photo', label: 'Photo' },
 ];
+/** Colours that work with white text; "Mix it up" picks from these. */
+const MIX_COLOURS = ['#087565', '#1E3352', '#C2410C', '#B91C1C', '#6D28D9', '#0369A1', '#BE185D', '#15803D', '#111827'];
 
 interface Poster {
   style: Style;
@@ -83,6 +90,25 @@ function starburst(ctx: CanvasRenderingContext2D, cx: number, cy: number, outer:
   ctx.fill();
 }
 
+const font = (weight: number, size: number) => `${weight} ${size}px "Plus Jakarta Sans", system-ui, sans-serif`;
+
+/** Mixes a hex colour towards black (amount < 0) or white (amount > 0). */
+function shade(hex: string, amount: number) {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.round(amount < 0 ? c * (1 + amount) : c + (255 - c) * amount);
+  return `rgb(${mix(n >> 16)}, ${mix((n >> 8) & 255)}, ${mix(n & 255)})`;
+}
+
+/** Headline then details, centred from y within width. Returns the y after them. */
+function headAndDetails(ctx: CanvasRenderingContext2D, p: Poster, y: number, width: number, headColour: string, detColour: string, x = SIZE / 2, headStart = 76) {
+  ctx.fillStyle = headColour;
+  const head = fitLines(ctx, p.headline, 800, headStart, 36, width, 2);
+  y += drawLines(ctx, head.lines, x, y, head.size);
+  ctx.fillStyle = detColour;
+  const det = fitLines(ctx, p.details, 600, 42, 24, width, 2);
+  return y + 20 + drawLines(ctx, det.lines, x, y + 20, det.size, 1.25);
+}
+
 /** Draws the poster at 1080×1080. */
 function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElement | null) {
   const ctx = canvas.getContext('2d')!;
@@ -99,9 +125,10 @@ function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElemen
     ctx.fillStyle = 'rgba(15,30,54,0.62)';
     ctx.fillRect(0, SIZE * 0.52, SIZE, SIZE * 0.48);
   } else {
-    ctx.fillStyle = p.style === 'burst' ? '#0F1E36' : p.color;
+    ctx.fillStyle = p.style === 'burst' || p.style === 'tag' ? '#0F1E36' : p.style === 'ribbon' ? '#F7F4EE' : p.style === 'frame' ? '#FFFFFF' : p.color;
     ctx.fillRect(0, 0, SIZE, SIZE);
   }
+  const accent = '#F2A33A';
 
   if (p.style === 'bold') {
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
@@ -137,6 +164,123 @@ function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElemen
     ctx.fillStyle = '#C9D2DE';
     const det = fitLines(ctx, p.details, 600, 42, 26, width, 2);
     drawLines(ctx, det.lines, SIZE / 2, y + 22, det.size, 1.25);
+  } else if (p.style === 'split') {
+    // Colour top with the big text, a slanted cut, white lower half with the headline.
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.moveTo(0, 600);
+    ctx.lineTo(SIZE, 500);
+    ctx.lineTo(SIZE, SIZE);
+    ctx.lineTo(0, SIZE);
+    ctx.fill();
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.moveTo(0, 600);
+    ctx.lineTo(SIZE, 500);
+    ctx.lineTo(SIZE, 516);
+    ctx.lineTo(0, 616);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.font = font(700, 34);
+    ctx.fillText(p.footer.split('·')[0].trim().toUpperCase(), SIZE / 2, 60);
+    ctx.fillStyle = '#FFFFFF';
+    const big = fitLines(ctx, p.big, 800, 210, 60, width, 2);
+    const bigH = big.lines.length * big.size;
+    drawLines(ctx, big.lines, SIZE / 2, 300 - bigH / 2 + 20, big.size, 1.0);
+    headAndDetails(ctx, p, 650, width, p.color, '#475569', SIZE / 2, 70);
+  } else if (p.style === 'ribbon') {
+    // Cream background, headline on top, the big text on a tilted colour ribbon, details below.
+    ctx.fillStyle = '#0F1E36';
+    const head = fitLines(ctx, p.headline, 800, 76, 36, width, 2);
+    drawLines(ctx, head.lines, SIZE / 2, 150, head.size);
+    ctx.save();
+    ctx.translate(SIZE / 2, 510);
+    ctx.rotate(-0.07);
+    ctx.fillStyle = shade(p.color, -0.35);
+    ctx.fillRect(-SIZE * 0.62, -118, SIZE * 1.24, 250);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-SIZE * 0.62, -130, SIZE * 1.24, 250);
+    ctx.fillStyle = '#FFFFFF';
+    const big = fitLines(ctx, p.big, 800, 190, 60, width, 1);
+    ctx.textBaseline = 'middle';
+    ctx.fillText(big.lines[0], 0, -2);
+    ctx.restore();
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#334155';
+    const det = fitLines(ctx, p.details, 600, 48, 24, width, 2);
+    drawLines(ctx, det.lines, SIZE / 2, 760, det.size, 1.25);
+  } else if (p.style === 'glow') {
+    // Deep gradient with soft circles, the big text in amber.
+    const g = ctx.createLinearGradient(0, 0, SIZE, SIZE);
+    g.addColorStop(0, shade(p.color, 0.15));
+    g.addColorStop(1, shade(p.color, -0.55));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, SIZE, SIZE);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    for (const [x, y, r] of [[900, 160, 260], [120, 820, 220], [980, 760, 120]]) {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.font = font(700, 32);
+    const label = p.footer.split('·')[0].trim().toUpperCase();
+    const lw = ctx.measureText(label).width + 56;
+    ctx.beginPath();
+    ctx.roundRect((SIZE - lw) / 2, 90, lw, 62, 31);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, SIZE / 2, 122);
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = accent;
+    const big = fitLines(ctx, p.big, 800, 200, 60, 700, 2);
+    const y = 190 + drawLines(ctx, big.lines, SIZE / 2, 210, big.size, 1.0);
+    headAndDetails(ctx, p, y + 30, width, '#FFFFFF', 'rgba(255,255,255,0.85)');
+  } else if (p.style === 'tag') {
+    // Navy background, the big text on a tilted price tag.
+    ctx.save();
+    ctx.translate(SIZE / 2, 330);
+    ctx.rotate(-0.12);
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.moveTo(-330, -150);
+    ctx.lineTo(250, -150);
+    ctx.lineTo(370, 0);
+    ctx.lineTo(250, 150);
+    ctx.lineTo(-330, 150);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#0F1E36';
+    ctx.beginPath();
+    ctx.arc(255, 0, 24, 0, Math.PI * 2);
+    ctx.fill();
+    const big = fitLines(ctx, p.big, 800, 150, 50, 520, 2);
+    const bigH = big.lines.length * big.size;
+    drawLines(ctx, big.lines, -40, -bigH / 2, big.size, 1.0);
+    ctx.restore();
+    headAndDetails(ctx, p, 600, width, '#FFFFFF', '#C9D2DE');
+  } else if (p.style === 'frame') {
+    // White with a thick colour frame and dotted corners.
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = 36;
+    ctx.strokeRect(48, 48, SIZE - 96, SIZE - 216);
+    ctx.fillStyle = shade(p.color, 0.6);
+    for (let i = 0; i < 5; i++)
+      for (let j = 0; j < 5 - i; j++) {
+        ctx.beginPath();
+        ctx.moveTo(116 + i * 30, 110 + j * 30);
+        ctx.arc(110 + i * 30, 110 + j * 30, 6, 0, Math.PI * 2);
+        ctx.moveTo(SIZE - 104 - i * 30, 110 + j * 30);
+        ctx.arc(SIZE - 110 - i * 30, 110 + j * 30, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    ctx.fillStyle = p.color;
+    const big = fitLines(ctx, p.big, 800, 170, 60, 600, 2);
+    const y = 150 + drawLines(ctx, big.lines, SIZE / 2, 170, big.size, 1.0);
+    ctx.fillStyle = accent;
+    ctx.fillRect(SIZE / 2 - 70, y + 24, 140, 10);
+    headAndDetails(ctx, p, y + 64, width - 100, '#0F1E36', '#475569', SIZE / 2, 64);
   } else {
     // Photo: offer badge top right, text on the darkened lower half.
     ctx.fillStyle = '#F2A33A';
@@ -158,7 +302,12 @@ function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElemen
   // Footer strip: business and phone.
   ctx.fillStyle = '#FFFFFF';
   ctx.fillRect(0, SIZE - 120, SIZE, 120);
-  ctx.fillStyle = p.style === 'burst' ? '#0F1E36' : p.color;
+  ctx.fillStyle = p.style === 'burst' || p.style === 'tag' ? '#0F1E36' : p.color;
+  if (p.style === 'ribbon' || p.style === 'frame' || p.style === 'split') {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(0, SIZE - 120, SIZE, 120);
+    ctx.fillStyle = '#FFFFFF';
+  }
   const foot = fitLines(ctx, p.footer, 800, 44, 26, width, 1);
   ctx.textBaseline = 'middle';
   ctx.fillText(foot.lines[0], SIZE / 2, SIZE - 60);
@@ -269,6 +418,13 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
   const instagramChosen = data.channels.some((c) => c.provider === 'instagram' && chosen.includes(c.id));
   const badRatio = instagramChosen && (ratio < 0.8 || ratio > 1.91);
 
+  /** A different layout and colour from the current one. */
+  const mixed = (p: Poster): Poster => {
+    const styles = STYLES.map((x) => x.value).filter((v) => v !== p.style && (v !== 'photo' || photo));
+    const colours = MIX_COLOURS.filter((c) => c.toLowerCase() !== p.color.toLowerCase());
+    return { ...p, style: styles[Math.floor(Math.random() * styles.length)], color: colours[Math.floor(Math.random() * colours.length)] };
+  };
+
   /** One click: the brief becomes the poster text, the post text and the offer. */
   const fillAll = async () => {
     if (!idea.trim()) return setStatus({ ok: false, text: 'Say what the post is about first' });
@@ -276,7 +432,8 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
     setStatus(null);
     try {
       const r = await api<{ big: string; headline: string; details: string; caption: string; offer: typeof offer | null }>('/posts/draft', { method: 'POST', body: { idea } });
-      setPoster((p) => ({ ...p, big: r.big || p.big, headline: r.headline || p.headline, details: r.details }));
+      // A fresh look each time, so posts don't all look the same.
+      setPoster((p) => mixed({ ...p, big: r.big || p.big, headline: r.headline || p.headline, details: r.details }));
       setCaption(r.caption);
       setIsOffer(!!r.offer);
       if (r.offer) setOffer(r.offer);
@@ -374,18 +531,21 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
           </div>
           {source === 'poster' ? (
             <>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-4 gap-2">
                 {STYLES.map((s) => (
                   <button
                     key={s.value}
                     type="button"
                     onClick={() => setPoster({ ...poster, style: s.value })}
-                    className={`flex-1 rounded-md border px-2 py-1.5 text-sm ${poster.style === s.value ? 'border-blue-600 bg-blue-50 font-semibold text-blue-700' : 'border-slate-300'}`}
+                    className={`rounded-md border px-2 py-1.5 text-sm ${poster.style === s.value ? 'border-blue-600 bg-blue-50 font-semibold text-blue-700' : 'border-slate-300'}`}
                   >
                     {s.label}
                   </button>
                 ))}
               </div>
+              <button type="button" onClick={() => setPoster(mixed(poster))} className="w-full rounded-md border border-dashed border-slate-400 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                🎲 Mix it up (new layout and colour)
+              </button>
               <label className="block text-sm">
                 <span className="mb-1 block font-medium">Big text</span>
                 <input className={input} value={poster.big} maxLength={30} onChange={(e) => (setPoster({ ...poster, big: e.target.value }), setPosterEdited(true))} />
@@ -403,7 +563,7 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
                 <input className={input} value={poster.footer} maxLength={60} onChange={(e) => setPoster({ ...poster, footer: e.target.value })} />
               </label>
               <div className="flex flex-wrap items-center gap-3 text-sm">
-                {poster.style !== 'burst' && (
+                {poster.style !== 'burst' && poster.style !== 'tag' && (
                   <label className="flex items-center gap-2">
                     Colour <input type="color" value={poster.color} onChange={(e) => setPoster({ ...poster, color: e.target.value })} className="h-8 w-10 rounded border border-slate-300" />
                   </label>
