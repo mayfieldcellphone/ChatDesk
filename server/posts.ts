@@ -120,6 +120,71 @@ ${business.ai_notes.trim() ? `\nAbout the business:\n${business.ai_notes.trim()}
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+const DRAFT_SCHEMA = {
+  type: 'object',
+  properties: {
+    big: { type: 'string', description: 'The poster’s big text, at most 14 characters, e.g. "25% OFF" or "$99"' },
+    headline: { type: 'string', description: 'What it is, at most 45 characters, e.g. "iPhone back glass replacement"' },
+    details: { type: 'string', description: 'One supporting line, at most 70 characters, e.g. "iPhone X to iPhone 15 · while you wait"' },
+    caption: { type: 'string', description: 'The social media post text' },
+    isOffer: { type: 'boolean', description: 'True if it is a discount, deal or limited-time offer' },
+    offerTitle: { type: 'string', description: 'Offer title for Google, at most 58 characters' },
+    start: { type: 'string', description: 'Offer start date, YYYY-MM-DD' },
+    end: { type: 'string', description: 'Offer end date, YYYY-MM-DD' },
+    terms: { type: 'string', description: 'Short offer conditions taken from the brief, or empty' },
+  },
+  required: ['big', 'headline', 'details', 'caption', 'isOffer', 'offerTitle', 'start', 'end', 'terms'],
+  additionalProperties: false,
+};
+
+const sydneyDate = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+
+/** Turns a one-line brief ("iPhone back glass 25% off, X to 15") into the poster text, post text and offer. */
+postsRouter.post('/draft', rateLimit('post-caption', 30, 10 * 60 * 1000), async (req, res) => {
+  const business = get<Business>('SELECT * FROM businesses WHERE id = ?', req.session!.businessId)!;
+  if (!aiConfigured()) return res.status(400).json({ error: 'Add ANTHROPIC_API_KEY under Integrations → Server keys first' });
+  const idea = String(req.body.idea ?? '').trim().slice(0, 600);
+  if (!idea) return res.status(400).json({ error: 'Say what the post is about' });
+  const now = new Date();
+  const today = sydneyDate(now);
+  const weekday = now.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long' });
+  const system = `You prepare promotional posts for ${business.name}, a local business in Australia. From the owner's brief, write the text for a square poster, the post text for Facebook, Instagram and Google Business Profile, and the offer details.
+Today is ${weekday} ${today} (Sydney time).
+Rules:
+- Use only facts in the brief: never invent prices, discounts, models, dates or conditions.
+- Poster text is short and punchy; keep the exact discount or price in the big text. Keep model ranges as given (e.g. "iPhone X to iPhone 15").
+- Post text: 2-4 short lines, friendly, Australian English, the exact offer, then a call to action${business.widget_call_number ? ` (call ${business.widget_call_number})` : ''}${business.website_url ? ` or visit ${business.website_url}` : ''}. End with 3-5 relevant hashtags. At most two emoji. No markdown. Only mention dates if the brief gives them.
+- Offer dates: work out real dates from the brief ("this weekend", "until Sunday", "all November"). If the brief gives none, start today and end 7 days from today.
+- If it isn't an offer, set isOffer false and still fill the offer fields sensibly.
+${business.ai_notes.trim() ? `\nAbout the business:\n${business.ai_notes.trim()}` : ''}`;
+  try {
+    const response = await anthropic().messages.create({
+      model: config('ANTHROPIC_MODEL') || 'claude-opus-5-5',
+      max_tokens: 4000,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: DRAFT_SCHEMA } },
+      system,
+      messages: [{ role: 'user', content: `Brief from the owner:\n<brief>\n${idea}\n</brief>` }],
+    });
+    const text = response.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+    const d = JSON.parse(text) as Record<string, unknown>;
+    const str = (k: string, max: number) => String(d[k] ?? '').trim().slice(0, max);
+    let start = str('start', 10);
+    let end = str('end', 10);
+    if (!DATE.test(start) || start < today) start = today;
+    if (!DATE.test(end) || end < start) end = sydneyDate(new Date(Date.parse(`${start}T12:00:00Z`) + 7 * 86_400_000));
+    res.json({
+      big: str('big', 30),
+      headline: str('headline', 60),
+      details: str('details', 90),
+      caption: str('caption', 2000),
+      offer: d.isOffer ? { title: str('offerTitle', 58), start, end, terms: str('terms', 1500) } : null,
+    });
+  } catch (err) {
+    console.error('Post draft failed:', err);
+    res.status(502).json({ error: 'The AI service had a problem. Try again shortly.' });
+  }
+});
+
 postsRouter.post('/', async (req, res) => {
   const { businessId, userId } = req.session!;
   const caption = String(req.body.caption ?? '').trim();

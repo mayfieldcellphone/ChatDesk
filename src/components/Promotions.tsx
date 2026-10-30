@@ -267,6 +267,25 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
   const instagramChosen = data.channels.some((c) => c.provider === 'instagram' && chosen.includes(c.id));
   const badRatio = instagramChosen && (ratio < 0.8 || ratio > 1.91);
 
+  /** One click: the brief becomes the poster text, the post text and the offer. */
+  const fillAll = async () => {
+    if (!idea.trim()) return setStatus({ ok: false, text: 'Say what the post is about first' });
+    setBusy('fill');
+    setStatus(null);
+    try {
+      const r = await api<{ big: string; headline: string; details: string; caption: string; offer: typeof offer | null }>('/posts/draft', { method: 'POST', body: { idea } });
+      setPoster((p) => ({ ...p, big: r.big || p.big, headline: r.headline || p.headline, details: r.details }));
+      setCaption(r.caption);
+      setIsOffer(!!r.offer);
+      if (r.offer) setOffer(r.offer);
+      setSource('poster');
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message });
+    } finally {
+      setBusy('');
+    }
+  };
+
   const writeCaption = async () => {
     setBusy('caption');
     setStatus(null);
@@ -316,10 +335,28 @@ function Composer({ data, onPosted }: { data: Data; onPosted: () => void }) {
         <h2 className="font-semibold">New post</h2>
         <p className="text-sm text-slate-500">One post to Google, Facebook and Instagram at once.</p>
       </div>
-      <label className="block text-sm">
-        <span className="mb-1 block font-medium">What’s it about?</span>
-        <input className={input} value={idea} maxLength={300} onChange={(e) => setIdea(e.target.value)} placeholder="e.g. iPhone 14 screen repair 25% off this weekend" />
-      </label>
+      <div className="text-sm">
+        <label htmlFor="post-idea" className="mb-1 block font-medium">What’s it about?</label>
+        <div className="flex gap-2">
+          <input
+            id="post-idea"
+            className={input}
+            value={idea}
+            maxLength={300}
+            onChange={(e) => setIdea(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && data.aiAvailable && (e.preventDefault(), fillAll())}
+            placeholder="e.g. iPhone back glass replacement 25% off, iPhone X to iPhone 15, this weekend"
+          />
+          {data.aiAvailable && (
+            <button type="button" onClick={fillAll} disabled={!!busy} className="shrink-0 rounded-md bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
+              {busy === 'fill' ? 'Making it…' : '✨ Make my post'}
+            </button>
+          )}
+        </div>
+        <span className="mt-1 block text-xs text-slate-500">
+          {data.aiAvailable ? 'Fills in the poster, the post text and the offer dates. You can change anything after.' : 'Add ANTHROPIC_API_KEY under Integrations → Server keys to have this filled in for you.'}
+        </span>
+      </div>
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-3">
