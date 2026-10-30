@@ -329,3 +329,36 @@ export function startReviewSync() {
   setTimeout(runAll, 15_000).unref();
   setInterval(runAll, SYNC_EVERY_MS).unref();
 }
+
+export interface GoogleOffer {
+  title: string;
+  /** YYYY-MM-DD */
+  start: string;
+  end: string;
+  terms?: string;
+}
+
+const googleDate = (d: string) => {
+  const [year, month, day] = d.split('-').map(Number);
+  return { year, month, day };
+};
+
+/** Publishes a post (an Offer post when dates are given) with a photo to a Google Business Profile location. */
+export async function postToGoogle(connection: Connection, { summary, imageUrl, offer, website }: { summary: string; imageUrl: string; offer?: GoogleOffer | null; website?: string | null }) {
+  const token = await accessToken(connection);
+  const body: Record<string, unknown> = {
+    languageCode: 'en-AU',
+    summary: summary.slice(0, 1500),
+    media: [{ mediaFormat: 'PHOTO', sourceUrl: imageUrl }],
+  };
+  if (offer) {
+    body.topicType = 'OFFER';
+    body.event = { title: offer.title.slice(0, 58), schedule: { startDate: googleDate(offer.start), endDate: googleDate(offer.end) } };
+    if (offer.terms) body.offer = { termsConditions: offer.terms.slice(0, 1500) };
+  } else {
+    body.topicType = 'STANDARD';
+    if (website) body.callToAction = { actionType: 'LEARN_MORE', url: website };
+  }
+  const post = await googleFetch<{ name: string; searchUrl?: string }>(token, api(`mybusiness.googleapis.com/v4/${connection.external_id}/localPosts`), { method: 'POST', body });
+  return post.searchUrl ?? 'https://business.google.com/';
+}

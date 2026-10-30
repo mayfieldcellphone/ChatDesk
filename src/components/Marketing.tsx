@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Business } from '../api';
 import { isMobileNumber, parseContactsFile, type ImportRow, type ParsedFile } from '../contactImport';
+import Promotions from './Promotions';
 
 interface Campaign {
   id: string;
@@ -51,7 +52,7 @@ const sourceLabel = (s: string) => (s === 'chatbird' ? 'ChatBird (chats, texts, 
 const fmt = (n: number) => n.toLocaleString();
 
 export default function Marketing({ business }: { business: Business }) {
-  const [tab, setTab] = useState<'campaigns' | 'customers'>('campaigns');
+  const [tab, setTab] = useState<'posts' | 'campaigns' | 'customers'>('posts');
   const [sources, setSources] = useState<{ source: string; count: number }[]>([]);
   const loadSources = () => api<CustomersData>('/marketing/contacts?status=subscribed').then((d) => setSources(d.sources)).catch(() => {});
   useEffect(() => {
@@ -64,17 +65,19 @@ export default function Marketing({ business }: { business: Business }) {
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <h1 className="text-xl font-semibold">Marketing</h1>
-            <p className="text-sm text-slate-500">Texts and emails to your customers, with review requests, offers and news.</p>
+            <p className="text-sm text-slate-500">Posts for Google, Facebook and Instagram, and texts and emails to your customers.</p>
           </div>
           <div className="flex w-full rounded-md bg-white p-1 text-sm shadow-sm sm:ml-auto sm:w-auto">
-            {(['campaigns', 'customers'] as const).map((t) => (
-              <button key={t} onClick={() => setTab(t)} className={`flex-1 rounded px-4 py-1.5 capitalize ${tab === t ? 'bg-slate-900 font-medium text-white' : 'text-slate-600'}`}>
-                {t}
+            {([['posts', 'Social posts'], ['campaigns', 'Texts & emails'], ['customers', 'Customers']] as const).map(([t, label]) => (
+              <button key={t} onClick={() => setTab(t)} className={`flex-1 whitespace-nowrap rounded px-3 py-1.5 ${tab === t ? 'bg-slate-900 font-medium text-white' : 'text-slate-600'}`}>
+                {label}
               </button>
             ))}
           </div>
         </div>
-        {tab === 'campaigns' ? (
+        {tab === 'posts' ? (
+          <Promotions />
+        ) : tab === 'campaigns' ? (
           <Campaigns business={business} sources={sources} onOpenCustomers={() => setTab('customers')} />
         ) : (
           <Customers onChanged={loadSources} />

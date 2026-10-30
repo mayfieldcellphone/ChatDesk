@@ -25,6 +25,10 @@ export const META_SCOPES = [
   'business_management',
   'instagram_basic',
   'instagram_manage_messages',
+  // Promotions (posts.ts): publishing photos to the Page and to Instagram.
+  'pages_manage_posts',
+  'pages_read_engagement',
+  'instagram_content_publish',
 ];
 
 export class MetaError extends Error {}
@@ -299,4 +303,36 @@ export async function disconnectMeta(connection: Connection) {
     console.error('Unsubscribing the Page failed (continuing):', err);
   }
   for (const c of siblings) run('DELETE FROM connections WHERE id = ?', c.id);
+}
+
+/** Posts a photo with a caption to the connected Facebook Page. Returns a link to the post. */
+export async function postToFacebook(connection: Connection, imageUrl: string, caption: string) {
+  const pageId = connection.external_id;
+  const r = await graph<{ id: string; post_id?: string }>(`/${pageId}/photos`, {
+    method: 'POST',
+    token: decrypt(connection.access_token),
+    params: { url: imageUrl, caption, published: 'true' },
+  });
+  return `https://www.facebook.com/${r.post_id ?? r.id}`;
+}
+
+/** Publishes a photo (JPEG) with a caption to the connected Instagram account. Returns a link to the post. */
+export async function postToInstagram(connection: Connection, imageUrl: string, caption: string) {
+  const token = decrypt(connection.access_token);
+  const container = await graph<{ id: string }>(`/${connection.external_id}/media`, {
+    method: 'POST',
+    token,
+    params: { image_url: imageUrl, caption },
+  });
+  // Instagram fetches the image before it can publish; give it a few tries.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const published = await graph<{ id: string }>(`/${connection.external_id}/media_publish`, { method: 'POST', token, params: { creation_id: container.id } });
+      const media = await graph<{ permalink?: string }>(`/${published.id}`, { token, params: { fields: 'permalink' } }).catch(() => ({ permalink: undefined }));
+      return media.permalink ?? 'https://www.instagram.com/';
+    } catch (err) {
+      if (attempt >= 3 || !/not ready|not finished|processing/i.test((err as Error).message)) throw err;
+      await new Promise((r) => setTimeout(r, Number(process.env.META_PUBLISH_RETRY_MS) || 4000));
+    }
+  }
 }

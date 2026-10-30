@@ -347,6 +347,32 @@ addColumn('reviews', 'ai_draft', 'TEXT');
 addColumn('reviews', 'auto_replied', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('reviews', 'reply_error', 'TEXT');
 
+// Promotions (posts.ts): images for posts, served publicly at /media/<id>.jpg so Google, Facebook
+// and Instagram can fetch them, and the posts themselves with each channel's result.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS media (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    mime TEXT NOT NULL,
+    data BLOB NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS social_posts (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    caption TEXT NOT NULL,
+    media_id TEXT NOT NULL REFERENCES media(id),
+    offer TEXT,
+    channels TEXT NOT NULL,
+    scheduled_at TEXT,
+    status TEXT NOT NULL CHECK (status IN ('scheduled', 'posting', 'done', 'partial', 'failed', 'cancelled')),
+    results TEXT NOT NULL DEFAULT '{}',
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS social_posts_business ON social_posts(business_id, created_at);
+`);
+
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
 export interface Business {

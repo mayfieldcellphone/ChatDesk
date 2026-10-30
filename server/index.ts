@@ -13,6 +13,7 @@ import { leadsRouter } from './leads';
 import { reportsRouter, startWeeklyReports } from './reports';
 import { marketingRouter, startCampaigns, unsubscribeRouter } from './campaigns';
 import { attachReceptionist, receptionistRouter } from './receptionist';
+import { mediaRouter, postsRouter, startScheduledPosts } from './posts';
 import { all, type Connection } from './db';
 
 const app = express();
@@ -63,6 +64,8 @@ app.use('/api/meta', metaWebhookRouter);
 app.use('/api/marketing/contacts/import', express.json({ limit: '2mb' }));
 app.use(express.json({ limit: '50kb' }));
 app.use('/api/unsubscribe', unsubscribeRouter);
+// Post images, fetched by Google, Facebook and Instagram.
+app.use('/media', mediaRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/widget', widgetRouter);
 app.use('/api/leads', leadsRouter);
@@ -71,6 +74,7 @@ app.use('/api/reviews', reviewsRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/marketing', marketingRouter);
 app.use('/api/receptionist', receptionistRouter);
+app.use('/api/posts', postsRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -103,6 +107,7 @@ if (process.env.NODE_ENV === 'production') {
 startReviewSync();
 startWeeklyReports();
 startCampaigns();
+startScheduledPosts();
 
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));
