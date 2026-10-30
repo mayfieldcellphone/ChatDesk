@@ -26,6 +26,7 @@ export default function ReviewRepliesSection() {
   const [mode, setMode] = useState<Mode>('off');
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
     api<Data>('/reviews/auto-reply')
@@ -34,9 +35,16 @@ export default function ReviewRepliesSection() {
         setMode(d.mode);
         setNotes(d.notes);
       })
-      .catch(() => {});
+      .catch((err) => setLoadError((err as Error).message));
   }, []);
-  if (!data) return null;
+  if (!data) {
+    return loadError ? (
+      <section className="rounded-xl bg-white p-6 shadow-sm">
+        <h2 className="text-base font-semibold">Review replies</h2>
+        <p className="mt-2 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Couldn’t load this setting: {loadError}</p>
+      </section>
+    ) : null;
+  }
 
   const save = async (e: FormEvent) => {
     e.preventDefault();

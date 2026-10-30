@@ -76,7 +76,13 @@ export default function ReceptionistSection() {
     load();
   }, []);
 
-  if (!data || !form) return null;
+  if (!data || !form) {
+    return status && !status.ok ? (
+      <Card title="AI phone receptionist">
+        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">Couldn’t load this setting: {status.text}</p>
+      </Card>
+    ) : null;
+  }
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
