@@ -14,12 +14,16 @@ export interface ImportRow {
   /** Saved in the phone's contacts under a name (likely a friend or family member, not a customer). */
   saved?: boolean;
   messages?: number;
+  /** They opted out of texts in the system it came from (e.g. Birdeye's "Text opt-out"): imported as unsubscribed. */
+  optedOut?: boolean;
 }
 
 export interface ParsedFile {
   kind: 'sms-backup' | 'table' | 'list';
   rows: ImportRow[];
   ignored: number;
+  /** The system it was exported from, when the columns give it away (e.g. "Birdeye"). */
+  origin?: string;
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -149,7 +153,13 @@ function parseDate(value: string) {
 }
 
 function parseCsv(text: string): ParsedFile {
-  const table = parseTable(text);
+  return parseRows(parseTable(text)) ?? parseList(text);
+}
+
+const OPTED_OUT = /opt-?out|unsubscrib|^no$|^false$|^n$/i;
+
+/** A spreadsheet's rows (first row = headings). Null if it has no phone or email column. */
+function parseRows(table: string[][]): ParsedFile | null {
   const header = (table[0] ?? []).map((h) => h.trim().toLowerCase());
   const phoneCol = find(header, [/^(mobile|mobile phone|mobile number|cell|cell phone)$/, /mobile/, /phone/, /^(number|contact number)$/, /^chat session$/, /sender|address|handle|from|recipient/], /type|label|home|work|office|fax/);
   const emailCol = find(header, [/^e-?mail( address)?$/, /e-?mail/]);
@@ -157,15 +167,26 @@ function parseCsv(text: string): ParsedFile {
   const firstCol = find(header, [/^first( name)?$/, /first|given/]);
   const lastCol = find(header, [/^last( name)?$/, /surname|family|last name/]);
   const dateCol = find(header, [/last (contact|visit|activity|message|seen)/, /^(date|message date|sent|time|timestamp)$/, /date|time/], /birth|dob|created/);
-  if (phoneCol < 0 && emailCol < 0) return parseList(text);
+  if (phoneCol < 0 && emailCol < 0) return null;
+  // Birdeye-style permissions: texting opt-outs are imported unsubscribed; marketing-email opt-outs
+  // are imported without their email address (or unsubscribed if email is all there is).
+  const textPermCol = find(header, [/text(ing)? permission/, /sms (opt|permission|consent)/]);
+  const mailPermCol = find(header, [/marketing e-?mail permission/, /e-?mail (opt|permission|consent)/]);
 
   const byKey = new Map<string, ImportRow>();
   let ignored = 0;
   for (const cells of table.slice(1)) {
     const phone = phoneCol >= 0 ? (cells[phoneCol] ?? '').trim() : '';
     const emailRaw = emailCol >= 0 ? (cells[emailCol] ?? '').trim().toLowerCase() : '';
-    const email = EMAIL.test(emailRaw) ? emailRaw : undefined;
+    let email = EMAIL.test(emailRaw) ? emailRaw : undefined;
     const pKey = phone ? phoneKey(phone) : '';
+    const textOut = textPermCol >= 0 && OPTED_OUT.test((cells[textPermCol] ?? '').trim());
+    const mailOut = mailPermCol >= 0 && OPTED_OUT.test((cells[mailPermCol] ?? '').trim());
+    let optedOut = textOut;
+    if (email && mailOut) {
+      if (pKey.length >= 8) email = undefined;
+      else optedOut = true;
+    }
     if ((!pKey || pKey.length < 8) && !email) {
       ignored++;
       continue;
@@ -182,9 +203,11 @@ function parseCsv(text: string): ParsedFile {
     if (name && !/^\+?[\d\s()-]+$/.test(name)) row.name ||= name;
     if (last && (!row.lastContactAt || last > row.lastContactAt)) row.lastContactAt = last;
     row.messages = (row.messages ?? 0) + 1;
+    if (optedOut) row.optedOut = true;
     byKey.set(key, row);
   }
-  return { kind: 'table', rows: [...byKey.values()], ignored };
+  const origin = header.includes('texting permissions') && header.some((h) => h.startsWith('experience score')) ? 'Birdeye' : undefined;
+  return { kind: 'table', rows: [...byKey.values()], ignored, origin };
 }
 
 function parseList(text: string): ParsedFile {
@@ -198,6 +221,62 @@ function parseList(text: string): ParsedFile {
     else ignored++;
   }
   return { kind: 'list', rows: [...seen.values()], ignored };
+}
+
+/** Reads the first sheet of an Excel .xlsx file (a zip of XML) as rows of text, using the browser's own unzip. */
+export async function readXlsx(buffer: ArrayBuffer): Promise<string[][]> {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  // The zip's central directory lists every file: find it from the end-of-directory record.
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 66_000); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error('That isn’t an Excel file ChatBird can read. Save it as CSV and try again.');
+  const files = new Map<string, { offset: number; size: number; method: number }>();
+  let p = view.getUint32(eocd + 16, true);
+  for (let n = view.getUint16(eocd + 10, true); n > 0; n--) {
+    const method = view.getUint16(p + 10, true);
+    const size = view.getUint32(p + 20, true);
+    const nameLen = view.getUint16(p + 28, true);
+    const extra = view.getUint16(p + 30, true);
+    const comment = view.getUint16(p + 32, true);
+    const offset = view.getUint32(p + 42, true);
+    files.set(new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen)), { offset, size, method });
+    p += 46 + nameLen + extra + comment;
+  }
+  const read = async (name: string) => {
+    const f = files.get(name);
+    if (!f) return '';
+    const start = f.offset + 30 + view.getUint16(f.offset + 26, true) + view.getUint16(f.offset + 28, true);
+    const data = bytes.slice(start, start + f.size);
+    if (f.method === 0) return new TextDecoder().decode(data);
+    const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new Response(stream).text();
+  };
+  const xml = (s: string) => new DOMParser().parseFromString(s, 'application/xml');
+  const shared = [...xml(await read('xl/sharedStrings.xml')).getElementsByTagName('si')].map((si) => [...si.getElementsByTagName('t')].map((t) => t.textContent ?? '').join(''));
+  const sheetName = [...files.keys()].filter((k) => /^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort()[0];
+  if (!sheetName) throw new Error('No sheet found in that Excel file.');
+  const colIndex = (ref: string) => [...ref.replace(/\d+/g, '')].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
+  return [...xml(await read(sheetName)).getElementsByTagName('row')].map((row) => {
+    const out: string[] = [];
+    for (const c of row.getElementsByTagName('c')) {
+      const v = c.getElementsByTagName('v')[0]?.textContent ?? '';
+      const type = c.getAttribute('t');
+      const text = type === 's' ? shared[Number(v)] ?? '' : type === 'inlineStr' ? c.getElementsByTagName('t')[0]?.textContent ?? '' : v;
+      out[colIndex(c.getAttribute('r') ?? 'A1')] = text;
+    }
+    return Array.from(out, (x) => x ?? '');
+  });
+}
+
+/** An Excel export (e.g. Birdeye's contacts) read the same way as a CSV. */
+export function parseSpreadsheet(table: string[][]): ParsedFile {
+  return parseRows(table) ?? { kind: 'table', rows: [], ignored: table.length };
 }
 
 export function parseContactsFile(text: string): ParsedFile {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Business } from '../api';
-import { isMobileNumber, parseContactsFile, type ImportRow, type ParsedFile } from '../contactImport';
+import { isMobileNumber, parseContactsFile, parseSpreadsheet, readXlsx, type ImportRow, type ParsedFile } from '../contactImport';
 import Promotions from './Promotions';
 
 interface Campaign {
@@ -587,14 +587,14 @@ function Importer({ onClose, onImported }: { onClose: () => void; onImported: ()
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const read = (text: string, name: string) => {
+  const read = (text: string | ParsedFile, name: string) => {
     setError('');
     setResult(null);
-    const p = parseContactsFile(text);
+    const p = typeof text === 'string' ? parseContactsFile(text) : text;
     if (p.rows.length === 0) return setError('No phone numbers or emails found in that file.');
     setParsed(p);
     setFileName(name);
-    setListName(p.kind === 'sms-backup' ? 'Phone messages' : /birdeye/i.test(name) ? 'Birdeye' : /repair ?bill/i.test(name) ? 'RepairBill' : name.replace(/\.[a-z]+$/i, '').slice(0, 40) || 'Imported');
+    setListName(p.kind === 'sms-backup' ? 'Phone messages' : p.origin ?? (/birdeye/i.test(name) ? 'Birdeye' : /repair ?bill/i.test(name) ? 'RepairBill' : name.replace(/\.[a-z]+$/i, '').slice(0, 40) || 'Imported'));
   };
 
   const chosen: ImportRow[] = useMemo(() => {
@@ -616,7 +616,7 @@ function Importer({ onClose, onImported }: { onClose: () => void; onImported: ()
     try {
       for (let i = 0; i < chosen.length; i += 1000) {
         setProgress(`Importing ${fmt(Math.min(i + 1000, chosen.length))} of ${fmt(chosen.length)}…`);
-        const batch = chosen.slice(i, i + 1000).map(({ phone, email, name, lastContactAt }) => ({ phone, email, name, lastContactAt }));
+        const batch = chosen.slice(i, i + 1000).map(({ phone, email, name, lastContactAt, optedOut }) => ({ phone, email, name, lastContactAt, optedOut }));
         const r = await api<{ added: number; updated: number }>('/marketing/contacts/import', { method: 'POST', body: { source: listName, rows: batch } });
         added += r.added;
         updated += r.updated;
@@ -663,7 +663,10 @@ function Importer({ onClose, onImported }: { onClose: () => void; onImported: ()
             </div>
             <div className="rounded-lg bg-slate-50 p-3">
               <b>Birdeye / RepairBill / spreadsheet</b>
-              <p className="mt-1 text-slate-600">Export the contacts or customers as CSV. Columns for name, phone, email and date are found automatically.</p>
+              <p className="mt-1 text-slate-600">
+                Export the contacts or customers (Excel .xlsx or CSV) and upload the file. Columns for name, phone, email and date are found automatically, and anyone who opted
+                out in Birdeye stays unsubscribed.
+              </p>
             </div>
           </div>
           <p className="text-xs text-slate-500">
@@ -677,12 +680,17 @@ function Importer({ onClose, onImported }: { onClose: () => void; onImported: ()
             <input
               ref={fileRef}
               type="file"
-              accept=".xml,.csv,.tsv,.txt,text/csv,text/xml"
+              accept=".xml,.csv,.tsv,.txt,.xlsx,text/csv,text/xml,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               className="hidden"
               onChange={async (e) => {
                 const f = e.target.files?.[0];
-                if (f) read(await f.text(), f.name);
                 e.target.value = '';
+                if (!f) return;
+                try {
+                  read(/\.xlsx$/i.test(f.name) ? parseSpreadsheet(await readXlsx(await f.arrayBuffer())) : await f.text(), f.name);
+                } catch (err) {
+                  setError((err as Error).message);
+                }
               }}
             />
           </div>
@@ -699,6 +707,7 @@ function Importer({ onClose, onImported }: { onClose: () => void; onImported: ()
           <p className="text-sm">
             <b>{fileName}</b>: found {fmt(parsed.rows.length)} {parsed.kind === 'sms-backup' ? 'numbers in your messages' : 'customers'}
             {parsed.ignored ? ` (ignored ${fmt(parsed.ignored)} ${parsed.kind === 'sms-backup' ? 'group chats and short codes' : 'rows without a number or email'})` : ''}.
+            {parsed.rows.some((r) => r.optedOut) && ` ${fmt(parsed.rows.filter((r) => r.optedOut).length)} opted out before and will be imported as unsubscribed.`}
           </p>
           <div className="space-y-2 text-sm">
             {savedCount > 0 && (

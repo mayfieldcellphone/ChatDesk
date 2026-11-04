@@ -204,6 +204,8 @@ marketingRouter.post('/contacts/import', (req, res) => {
       }
       const name = typeof row.name === 'string' ? row.name.trim().replace(/\s+/g, ' ').slice(0, 100) : '';
       const last = typeof row.lastContactAt === 'string' && !Number.isNaN(Date.parse(row.lastContactAt)) ? new Date(row.lastContactAt).toISOString() : null;
+      // Opted out where they came from (e.g. Birdeye): keep them unsubscribed. An import never re-subscribes anyone.
+      const optedOut = row.optedOut === true ? t : null;
       const existing =
         (phone && get<Contact>('SELECT * FROM contacts WHERE business_id = ? AND phone = ?', businessId, phone)) ||
         (email && get<Contact>('SELECT * FROM contacts WHERE business_id = ? AND email = ?', businessId, email)) ||
@@ -212,15 +214,16 @@ marketingRouter.post('/contacts/import', (req, res) => {
         const betterName = name && !firstName(existing) ? name : existing.name;
         run(
           `UPDATE contacts SET name = ?, phone = COALESCE(phone, ?), email = COALESCE(email, ?),
-             last_contact_at = CASE WHEN ? IS NOT NULL AND (last_contact_at IS NULL OR last_contact_at < ?) THEN ? ELSE last_contact_at END
+             last_contact_at = CASE WHEN ? IS NOT NULL AND (last_contact_at IS NULL OR last_contact_at < ?) THEN ? ELSE last_contact_at END,
+             opted_out_at = COALESCE(opted_out_at, ?)
            WHERE id = ?`,
-          betterName, phone, email, last, last, last, existing.id,
+          betterName, phone, email, last, last, last, optedOut, existing.id,
         );
         updated++;
       } else {
         run(
-          'INSERT INTO contacts (id, business_id, name, phone, email, source, last_contact_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          newId(), businessId, name || phone || email!, phone, email, source, last, t,
+          'INSERT INTO contacts (id, business_id, name, phone, email, source, last_contact_at, created_at, opted_out_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          newId(), businessId, name || phone || email!, phone, email, source, last, t, optedOut,
         );
         added++;
       }
