@@ -58,12 +58,16 @@ voiceRouter.post('/incoming', (req, res) => {
   const from = normalizePhone(params.From);
   if (!loadCall(params.CallSid)) {
     const conversation = phoneConversation(business, from);
-    const message = insertMessage(conversation, 'in', 'sms', 'Incoming call…', { kind: 'call' });
+    // A ringing call isn't unread yet: if someone answers it's only logged. It becomes unread (and
+    // alerts) only if it turns into a missed call or a voicemail (see /status and /recording).
+    const firstContact = !get('SELECT 1 FROM messages WHERE conversation_id = ? LIMIT 1', conversation.id);
+    const message = insertMessage(conversation, 'in', 'sms', 'Incoming call…', { kind: 'call', quiet: true });
+    if (firstContact) run("UPDATE conversations SET status = 'closed' WHERE id = ?", conversation.id);
     run(
       "INSERT INTO calls (id, business_id, conversation_id, call_sid, status, message_id, created_at) VALUES (?, ?, ?, ?, 'ringing', ?, ?)",
       newId(), business.id, conversation.id, params.CallSid, message.id, now(),
     );
-    publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: { ...message, author_name: null } });
+    publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: { ...message, author_name: null }, quiet: true });
   }
 
   // The AI receptionist answers every call, or outside opening hours (see Settings → AI receptionist).
@@ -196,6 +200,10 @@ voiceRouter.post('/status', (req, res) => {
     call.status = 'missed';
     run("UPDATE calls SET status = 'missed' WHERE id = ?", call.id);
     refreshCallMessage(call);
+    // Now it needs attention: unread, back in Open, and a chime in the open inbox.
+    run("UPDATE conversations SET unread_count = unread_count + 1, status = 'open' WHERE id = ?", call.conversation_id);
+    const missed = call.message_id && get<Message>('SELECT * FROM messages WHERE id = ?', call.message_id);
+    if (missed) publish(`biz:${call.business_id}`, { type: 'message', conversationId: call.conversation_id, message: { ...missed, author_name: null } });
   }
 
   const business = get<Business>('SELECT * FROM businesses WHERE id = ?', call.business_id)!;

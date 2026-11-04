@@ -563,6 +563,8 @@ export interface MessageOptions {
   recordingSid?: string | null;
   duration?: number | null;
   externalId?: string | null;
+  /** An incoming line that shouldn't count as unread or reopen the conversation (a call still ringing). */
+  quiet?: boolean;
 }
 
 export function insertMessage(
@@ -570,7 +572,7 @@ export function insertMessage(
   direction: 'in' | 'out',
   channel: Channel,
   body: string,
-  { authorId = null, automated = false, assistant = false, kind = 'text', recordingSid = null, duration = null, externalId = null }: MessageOptions = {},
+  { authorId = null, automated = false, assistant = false, kind = 'text', recordingSid = null, duration = null, externalId = null, quiet = false }: MessageOptions = {},
 ): Message {
   const message: Message = {
     id: newId(),
@@ -593,7 +595,9 @@ export function insertMessage(
   );
   // A customer message reopens the conversation and counts as unread; a staff reply clears unread.
   // Automated replies (away messages) leave unread alone so the team still sees the chat needs an answer.
-  if (direction === 'in') {
+  if (direction === 'in' && quiet) {
+    run('UPDATE conversations SET last_message_at = ? WHERE id = ?', message.created_at, conversation.id);
+  } else if (direction === 'in') {
     run(
       "UPDATE conversations SET last_message_at = ?, status = 'open', unread_count = unread_count + 1 WHERE id = ?",
       message.created_at, conversation.id,
@@ -724,6 +728,49 @@ run(
 addColumn('conversations', 'assistant_paused', 'INTEGER NOT NULL DEFAULT 0');
 // Staff replies used to pause the assistant for 30 minutes (2); now only the 🤖 button pauses it.
 run('UPDATE conversations SET assistant_paused = 0 WHERE assistant_paused = 2');
+
+// ---------- One-off data fixes ----------
+// Each runs once (recorded in data_fixes), after a backup copy of the database is saved next to it.
+
+db.exec('CREATE TABLE IF NOT EXISTS data_fixes (name TEXT PRIMARY KEY, ran_at TEXT NOT NULL)');
+
+function dataFix(name: string, fix: () => void) {
+  if (get('SELECT 1 FROM data_fixes WHERE name = ?', name)) return;
+  if (file !== ':memory:') {
+    const backup = path.join(path.dirname(file), `backup-before-${name}-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
+    db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
+    console.log(`Saved a database backup to ${backup}`);
+  }
+  fix();
+  run('INSERT INTO data_fixes (name, ran_at) VALUES (?, ?)', name, now());
+}
+
+/** Conversations whose newest message is a call someone answered, minus any tagged "Needs reply". */
+export const ANSWERED_CALL_CONVERSATIONS = `
+  SELECT c.id FROM conversations c
+   WHERE (SELECT m.kind || '|' || m.body FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) LIKE 'call|Answered call%'
+     AND NOT EXISTS (SELECT 1 FROM conversation_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.conversation_id = c.id AND t.name = 'Needs reply' COLLATE NOCASE)`;
+
+// Answered calls used to count as unread. Clear that where every unread message is an answered
+// call (so an unread text or voicemail stays unread). Nothing is deleted.
+dataFix('answered-calls-read', () => {
+  const rows = all<{ id: string; unread_count: number }>(
+    `SELECT c.id, c.unread_count FROM conversations c WHERE c.unread_count > 0
+       AND NOT EXISTS (SELECT 1 FROM conversation_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.conversation_id = c.id AND t.name = 'Needs reply' COLLATE NOCASE)`,
+  );
+  let cleared = 0;
+  for (const c of rows) {
+    const unread = all<{ kind: string; body: string }>(
+      "SELECT kind, body FROM messages WHERE conversation_id = ? AND direction = 'in' ORDER BY created_at DESC LIMIT ?",
+      c.id, c.unread_count,
+    );
+    if (unread.length && unread.every((m) => m.kind === 'call' && m.body.startsWith('Answered call'))) {
+      run('UPDATE conversations SET unread_count = 0 WHERE id = ?', c.id);
+      cleared++;
+    }
+  }
+  console.log(`Marked ${cleared} answered-call conversation(s) as read`);
+});
 
 export interface Faq {
   id: string;

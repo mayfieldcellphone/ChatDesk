@@ -79,7 +79,8 @@ export default function Inbox({ business, businesses, initialConversationId, onS
   businessesRef.current = businesses;
 
   const alertNewMessage = (event: Extract<InboxEvent, { type: 'message' }>) => {
-    if (event.message.direction !== 'in') return;
+    // quiet: a call that's still ringing; it alerts later only if nobody answers.
+    if (event.message.direction !== 'in' || event.quiet) return;
     const watching = !document.hidden && selectedRef.current === event.conversationId;
     if (watching) return;
     playChime();
@@ -113,6 +114,19 @@ export default function Inbox({ business, businesses, initialConversationId, onS
   }, []);
 
   const totalUnread = conversations.reduce((n, c) => n + c.unreadCount, 0);
+  const [bulkNote, setBulkNote] = useState('');
+  const bulk = async (path: 'read-all' | 'close-answered-calls') => {
+    if (path === 'close-answered-calls' && !confirm('Close every open conversation where the last thing was a call you answered? Ones tagged “Needs reply” stay open.')) return;
+    try {
+      const r = await api<{ count: number }>(`/conversations/${path}`, { method: 'POST', body: { scope } });
+      setBulkNote(path === 'read-all' ? 'All marked as read' : `Closed ${r.count} answered call${r.count === 1 ? '' : 's'}`);
+      loadList();
+      onActivity();
+    } catch (err) {
+      setBulkNote((err as Error).message);
+    }
+    setTimeout(() => setBulkNote(''), 4000);
+  };
   useEffect(() => {
     document.title = totalUnread ? `(${totalUnread}) ChatBird Inbox` : 'ChatBird Inbox';
   }, [totalUnread]);
@@ -158,6 +172,17 @@ export default function Inbox({ business, businesses, initialConversationId, onS
               </button>
             ))}
           </div>
+          {status === 'open' && (
+            <div className="flex items-center gap-3 text-xs">
+              <button onClick={() => bulk('read-all')} disabled={totalUnread === 0} className="font-medium text-blue-600 hover:underline disabled:text-slate-400 disabled:no-underline">
+                Mark all read
+              </button>
+              <button onClick={() => bulk('close-answered-calls')} className="font-medium text-blue-600 hover:underline">
+                Close all answered calls
+              </button>
+              {bulkNote && <span className="ml-auto text-slate-500">{bulkNote}</span>}
+            </div>
+          )}
           <div className="flex gap-2">
             <input
               value={query}

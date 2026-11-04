@@ -165,7 +165,7 @@ export function tagTextColor(hex: string) {
 
 /** Events pushed over /api/stream. */
 export type InboxEvent = (
-  | { type: 'message'; conversationId: string; message: Message }
+  | { type: 'message'; conversationId: string; message: Message; quiet?: boolean }
   | { type: 'message-updated'; conversationId: string; message: Message }
   | { type: 'read'; conversationId: string }
   | { type: 'contact'; contactId: string; conversationId?: undefined }

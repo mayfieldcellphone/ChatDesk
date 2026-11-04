@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { Readable } from 'node:stream';
 import {
+  ANSWERED_CALL_CONVERSATIONS,
   all, get, insertMessage, newId, normalizePhone, now, run,
   type Business, type Channel, type Contact, type Conversation, type Message, type SavedReply, type Tag, type Faq,
 } from './db';
@@ -595,6 +596,32 @@ inboxRouter.get('/conversations', (req, res) => {
       tags: tags.get(r.id) ?? [],
     })),
   });
+});
+
+/** The businesses a bulk action covers: every one this login runs (scope=all), or just the open one. */
+function scopeIds(req: Request) {
+  return req.body?.scope === 'all'
+    ? all<{ business_id: string }>('SELECT business_id FROM memberships WHERE user_id = ?', req.session!.userId).map((m) => m.business_id)
+    : [req.session!.businessId];
+}
+
+inboxRouter.post('/conversations/read-all', (req, res) => {
+  const ids = scopeIds(req);
+  const result = run(`UPDATE conversations SET unread_count = 0 WHERE unread_count > 0 AND business_id IN (${ids.map(() => '?').join(', ')})`, ...ids);
+  for (const id of ids) publish(`biz:${id}`, { type: 'read', conversationId: null });
+  res.json({ ok: true, count: Number(result.changes) });
+});
+
+/** Closes open conversations whose latest activity is a call someone answered, unless tagged "Needs reply". */
+inboxRouter.post('/conversations/close-answered-calls', (req, res) => {
+  const ids = scopeIds(req);
+  const result = run(
+    `UPDATE conversations SET status = 'closed', unread_count = 0
+      WHERE status = 'open' AND business_id IN (${ids.map(() => '?').join(', ')}) AND id IN (${ANSWERED_CALL_CONVERSATIONS})`,
+    ...ids,
+  );
+  for (const id of ids) publish(`biz:${id}`, { type: 'status', conversationId: null, status: 'closed' });
+  res.json({ ok: true, count: Number(result.changes) });
 });
 
 function loadConversation(businessId: string, id: string) {
