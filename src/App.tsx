@@ -4,12 +4,13 @@ import Login from './components/Login';
 import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Reviews from './components/Reviews';
+import Listings from './components/Listings';
 import Integrations from './components/Integrations';
 import Reports from './components/Reports';
 import Marketing from './components/Marketing';
 import { Logo, Wordmark } from './components/Logo';
 
-const VIEWS = ['inbox', 'reports', 'marketing', 'reviews', 'integrations', 'settings'] as const;
+const VIEWS = ['inbox', 'reports', 'marketing', 'reviews', 'listings', 'integrations', 'settings'] as const;
 type View = (typeof VIEWS)[number];
 
 // Line icons for the side menu (24px grid, drawn with the current text colour).
@@ -18,6 +19,7 @@ const VIEW_ICONS: Record<View, string[]> = {
   reports: ['M4 20V10', 'M10 20V4', 'M16 20v-7', 'M22 20H2'],
   marketing: ['M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z', 'M16 9a4 4 0 0 1 0 6', 'M19 6a8 8 0 0 1 0 12'],
   reviews: ['m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z'],
+  listings: ['M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z', 'M12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
   integrations: ['M9 7V3', 'M15 7V3', 'M6 7h12v4a6 6 0 0 1-12 0z', 'M12 17v4'],
   settings: ['M4 6h9', 'M17 6h3', 'M4 12h3', 'M11 12h9', 'M4 18h11', 'M19 18h1', 'M15 4a2 2 0 1 1 0 4a2 2 0 1 1 0-4', 'M9 10a2 2 0 1 1 0 4a2 2 0 1 1 0-4', 'M17 16a2 2 0 1 1 0 4a2 2 0 1 1 0-4'],
 };
@@ -205,6 +207,8 @@ export default function App() {
           <Marketing key={me.business.id} business={me.business} />
         ) : view === 'reviews' ? (
           <Reviews key={me.business.id} business={me.business} onSaved={(business) => setMe({ ...me, business })} onOpenIntegrations={() => setView('integrations')} />
+        ) : view === 'listings' ? (
+          <Listings key={me.business.id} onOpenIntegrations={() => setView('integrations')} />
         ) : view === 'integrations' ? (
           <Integrations
             key={me.business.id}

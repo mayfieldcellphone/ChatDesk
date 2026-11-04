@@ -6,6 +6,7 @@ import { handleNewReviews } from './reviewReplies';
 import { pushToBusiness } from './push';
 import { config } from './config';
 import { publicUrl } from './twilio';
+import { DAYS, validateSpecialDays, type Day, type SpecialDay, type WeeklyHours } from './hours';
 
 // Google Business Profile: connect locations, sync reviews, reply to them.
 // Setup (Google Cloud project + Business Profile API access): docs/INTEGRATIONS.md.
@@ -361,4 +362,105 @@ export async function postToGoogle(connection: Connection, { summary, imageUrl, 
   }
   const post = await googleFetch<{ name: string; searchUrl?: string }>(token, api(`mybusiness.googleapis.com/v4/${connection.external_id}/localPosts`), { method: 'POST', body });
   return post.searchUrl ?? 'https://business.google.com/';
+}
+
+// ---------- Business information (Listings) ----------
+// Read and update a location's hours, holiday hours, phone, website and description through the
+// Business Information API. Name and address are read only: changing them makes Google re-verify.
+
+type GTime = { hours?: number; minutes?: number };
+type GDate = { year: number; month: number; day: number };
+interface GoogleLocationInfo {
+  title?: string;
+  phoneNumbers?: { primaryPhone?: string };
+  websiteUri?: string;
+  profile?: { description?: string };
+  storefrontAddress?: { addressLines?: string[]; locality?: string; administrativeArea?: string; postalCode?: string };
+  regularHours?: { periods?: { openDay: string; openTime?: GTime; closeDay: string; closeTime?: GTime }[] };
+  specialHours?: { specialHourPeriods?: { startDate: GDate; endDate?: GDate; openTime?: GTime; closeTime?: GTime; closed?: boolean }[] };
+}
+
+const G_DAYS: Record<string, Day> = { MONDAY: 'mon', TUESDAY: 'tue', WEDNESDAY: 'wed', THURSDAY: 'thu', FRIDAY: 'fri', SATURDAY: 'sat', SUNDAY: 'sun' };
+const G_DAY_OF = Object.fromEntries(Object.entries(G_DAYS).map(([g, d]) => [d, g])) as Record<Day, string>;
+const toHhmm = (t?: GTime) => `${String(t?.hours ?? 0).padStart(2, '0')}:${String(t?.minutes ?? 0).padStart(2, '0')}`;
+const toGTime = (hhmm: string): GTime => {
+  const [hours, minutes] = hhmm.split(':').map(Number);
+  return minutes ? { hours, minutes } : { hours };
+};
+const toGDate = (date: string): GDate => {
+  const [year, month, day] = date.split('-').map(Number);
+  return { year, month, day };
+};
+const fromGDate = (d: GDate) => `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
+const locationPath = (connection: Connection) => `locations/${connection.external_id.split('/locations/')[1] ?? connection.external_id}`;
+
+export interface ListingDetails {
+  name: string;
+  address: string;
+  phone: string;
+  website: string;
+  description: string;
+  hours: WeeklyHours | null;
+  special: SpecialDay[];
+}
+
+/** The location's current details on Google. */
+export async function readGoogleListing(connection: Connection): Promise<ListingDetails> {
+  const token = await accessToken(connection);
+  const url = new URL(api(`mybusinessbusinessinformation.googleapis.com/v1/${locationPath(connection)}`));
+  url.searchParams.set('readMask', 'title,phoneNumbers,websiteUri,profile,storefrontAddress,regularHours,specialHours');
+  const g = await googleFetch<GoogleLocationInfo>(token, url.toString());
+  let hours: WeeklyHours | null = null;
+  if (g.regularHours?.periods?.length) {
+    hours = { mon: null, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null };
+    for (const p of g.regularHours.periods) {
+      const day = G_DAYS[p.openDay];
+      if (!day) continue;
+      const open = toHhmm(p.openTime), close = p.closeDay === p.openDay ? toHhmm(p.closeTime) : '23:59';
+      // Split days (e.g. a lunch break) become one span from first open to last close.
+      const cur = hours[day];
+      hours[day] = cur ? { open: open < cur.open ? open : cur.open, close: close > cur.close ? close : cur.close } : { open, close };
+    }
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const special = (g.specialHours?.specialHourPeriods ?? [])
+    .map((p): SpecialDay => (p.closed ? { date: fromGDate(p.startDate), closed: true } : { date: fromGDate(p.startDate), closed: false, open: toHhmm(p.openTime), close: toHhmm(p.closeTime) }))
+    .filter((s) => s.date >= today);
+  const a = g.storefrontAddress;
+  return {
+    name: g.title ?? connection.name,
+    address: a ? [...(a.addressLines ?? []), [a.locality, a.administrativeArea, a.postalCode].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '',
+    phone: g.phoneNumbers?.primaryPhone ?? '',
+    website: g.websiteUri ?? '',
+    description: g.profile?.description ?? '',
+    hours,
+    special: validateSpecialDays(special) ?? [],
+  };
+}
+
+/** Sends hours, holiday hours, phone, website and description to Google. */
+export async function updateGoogleListing(connection: Connection, d: Omit<ListingDetails, 'name' | 'address'>) {
+  const token = await accessToken(connection);
+  const url = new URL(api(`mybusinessbusinessinformation.googleapis.com/v1/${locationPath(connection)}`));
+  const body: GoogleLocationInfo = {
+    phoneNumbers: { primaryPhone: d.phone },
+    websiteUri: d.website,
+    profile: { description: d.description },
+    specialHours: {
+      specialHourPeriods: d.special.map((s) =>
+        s.closed ? { startDate: toGDate(s.date), closed: true } : { startDate: toGDate(s.date), openTime: toGTime(s.open!), closeTime: toGTime(s.close!) },
+      ),
+    },
+  };
+  const mask = ['phoneNumbers', 'websiteUri', 'profile.description', 'specialHours'];
+  if (d.hours) {
+    body.regularHours = {
+      periods: DAYS.filter((day) => d.hours![day]).map((day) => ({
+        openDay: G_DAY_OF[day], openTime: toGTime(d.hours![day]!.open), closeDay: G_DAY_OF[day], closeTime: toGTime(d.hours![day]!.close),
+      })),
+    };
+    mask.push('regularHours');
+  }
+  url.searchParams.set('updateMask', mask.join(','));
+  await googleFetch(token, url.toString(), { method: 'PATCH', body });
 }

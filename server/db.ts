@@ -418,6 +418,31 @@ db.exec('CREATE UNIQUE INDEX IF NOT EXISTS review_requests_token ON review_reque
 addColumn('businesses', 'reviews_widget', "TEXT NOT NULL DEFAULT '{}'");
 // When a review was shared as a post (Reviews → 📣 Share).
 addColumn('reviews', 'shared_at', 'TEXT');
+// Holiday hours (hours.ts SpecialDay[]), set from Listings; isOpen() follows them.
+addColumn('businesses', 'special_hours', "TEXT NOT NULL DEFAULT '[]'");
+db.exec(`
+  -- Listings: the business's details as published to Google, Facebook and the website (listings.ts).
+  CREATE TABLE IF NOT EXISTS listing_profiles (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    google_connection_id TEXT REFERENCES connections(id) ON DELETE SET NULL,
+    facebook_connection_id TEXT REFERENCES connections(id) ON DELETE SET NULL,
+    is_main INTEGER NOT NULL DEFAULT 0,
+    name TEXT NOT NULL,
+    address TEXT NOT NULL DEFAULT '',
+    phone TEXT NOT NULL DEFAULT '',
+    website TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    hours TEXT,
+    special_hours TEXT NOT NULL DEFAULT '[]',
+    checklist TEXT NOT NULL DEFAULT '{}',
+    published_at TEXT,
+    publish_results TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS listing_profiles_business ON listing_profiles(business_id);
+`);
 // Photos in conversations (media.ts). Customers' photos are private: only the team can see them.
 addColumn('messages', 'media_id', 'TEXT');
 addColumn('media', 'private', 'INTEGER NOT NULL DEFAULT 0');
@@ -483,6 +508,7 @@ export interface Business {
   review_auto_repeat_days: number;
   review_track_clicks: number;
   reviews_widget: string;
+  special_hours: string;
   address: string;
   pricing_mode: 'off' | 'from' | 'exact';
   pricing_rules: string;

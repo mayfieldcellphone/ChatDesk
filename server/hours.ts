@@ -60,10 +60,52 @@ export function localTime(timezone: string, at = new Date()) {
   return { day: part('weekday').toLowerCase().slice(0, 3) as Day, time: `${part('hour')}:${part('minute')}` };
 }
 
-/** Whether the business is open now. Always true when office hours are turned off. */
-export function isOpen(business: Pick<Business, 'hours_enabled' | 'hours' | 'timezone'>, at = new Date()) {
+/** A one-off day: closed (e.g. Christmas Day) or different hours. date is YYYY-MM-DD in the business's time. */
+export interface SpecialDay {
+  date: string;
+  closed: boolean;
+  open?: string;
+  close?: string;
+  label?: string;
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+/** Valid special days, sorted, at most 60; null if the input isn't a list. */
+export function validateSpecialDays(input: unknown): SpecialDay[] | null {
+  if (!Array.isArray(input)) return null;
+  const out: SpecialDay[] = [];
+  for (const raw of input.slice(0, 60)) {
+    if (!raw || typeof raw !== 'object') return null;
+    const r = raw as Record<string, unknown>;
+    const date = String(r.date ?? '');
+    if (!DATE.test(date)) return null;
+    const label = typeof r.label === 'string' ? r.label.trim().slice(0, 60) : '';
+    if (r.closed) out.push({ date, closed: true, ...(label ? { label } : {}) });
+    else {
+      const open = String(r.open ?? ''), close = String(r.close ?? '');
+      if (!TIME.test(open) || !TIME.test(close) || close <= open) return null;
+      out.push({ date, closed: false, open, close, ...(label ? { label } : {}) });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function parseSpecialDays(json: string | null | undefined): SpecialDay[] {
+  try {
+    return validateSpecialDays(JSON.parse(json || '[]')) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+export const localDateIn = (timezone: string, at = new Date()) => at.toLocaleDateString('en-CA', { timeZone: timezone });
+
+/** Whether the business is open now. Always true when office hours are turned off. Holiday hours win over the usual week. */
+export function isOpen(business: Pick<Business, 'hours_enabled' | 'hours' | 'timezone'> & { special_hours?: string | null }, at = new Date()) {
   if (!business.hours_enabled) return true;
   const { day, time } = localTime(business.timezone, at);
+  const special = parseSpecialDays(business.special_hours).find((s) => s.date === localDateIn(business.timezone, at));
+  if (special) return !special.closed && time >= special.open! && time < special.close!;
   const today = parseHours(business.hours)[day];
   return Boolean(today && time >= today.open && time < today.close);
 }

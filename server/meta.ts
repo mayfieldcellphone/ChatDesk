@@ -351,3 +351,40 @@ export async function postToInstagram(connection: Connection, imageUrl: string, 
     }
   }
 }
+
+// ---------- Page details (Listings) ----------
+
+const FB_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+
+/** Updates the Facebook Page's phone, website, opening hours and About text. Returns any parts Facebook refused. */
+export async function updatePageDetails(
+  connection: Connection,
+  d: { phone: string; website: string; description: string; hours: Record<string, { open: string; close: string } | null> | null },
+) {
+  const { pageId } = JSON.parse(connection.meta) as { pageId: string };
+  const token = decrypt(connection.access_token);
+  const problems: string[] = [];
+  const attempt = async (what: string, body: Record<string, unknown>) => {
+    try {
+      await graph(`/${pageId}`, { method: 'POST', token, body });
+    } catch (err) {
+      problems.push(`${what}: ${(err as Error).message}`);
+    }
+  };
+  // Separate requests, so one field Facebook won't take doesn't block the rest.
+  if (d.phone) await attempt('phone', { phone: d.phone });
+  if (d.website) await attempt('website', { website: d.website });
+  if (d.hours) {
+    const hours: Record<string, string> = {};
+    for (const day of FB_DAYS) {
+      const h = d.hours[day];
+      if (h) {
+        hours[`${day}_1_open`] = h.open;
+        hours[`${day}_1_close`] = h.close;
+      }
+    }
+    await attempt('hours', { hours });
+  }
+  if (d.description) await attempt('about', { about: d.description.slice(0, 255) });
+  return problems;
+}

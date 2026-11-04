@@ -11,6 +11,7 @@ import { rateLimit } from './rateLimit';
 import { forwardLead, type LeadType } from './repairbill';
 import { widgetReviews } from './reviewRequests';
 import { messageMedia } from './media';
+import { publicListing } from './listings';
 import { classifyVisit } from './leadSource';
 
 // Public API used by the embeddable widget (public/widget.js) on customers' websites.
@@ -76,6 +77,13 @@ widgetRouter.get('/:key/config', (req, res) => {
     // Shortcuts to the same options, shown above the closed chat button.
     buttons: Boolean(business.widget_buttons),
   });
+});
+
+// Opening hours, holiday hours and contact details for the website (public/hours.js), from Listings.
+widgetRouter.get('/:key/profile', (req, res) => {
+  const business = loadBusiness(req, res);
+  if (!business) return;
+  res.set('Cache-Control', 'public, max-age=300').json(publicListing(business.id, typeof req.query.location === 'string' ? req.query.location : undefined));
 });
 
 // The reviews widget (public/reviews.js) on the business's own website.

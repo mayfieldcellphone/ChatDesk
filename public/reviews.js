@@ -2,7 +2,7 @@
  * ChatBird reviews widget: your Google rating and recent reviews, for your own website.
  * Embed with: <script src="https://YOUR-CHATDESK-SERVER/reviews.js" data-key="WIDGET_KEY" async></script>
  * It appears where the script tag is, or inside <div id="chatbird-reviews"></div> if the page has one.
- * Which reviews it shows is set in ChatBird under Reviews → Reviews on your website.
+ * Which reviews it shows is set in ChatBird under Reviews \u2192 Reviews on your website.
  */
 (function () {
   'use strict';
@@ -167,7 +167,7 @@
       wrap.appendChild(track);
 
       var nav = el('div', 'nav');
-      [['‹', -1, 'Previous reviews'], ['›', 1, 'Next reviews']].forEach(function (a) {
+      [['\u2039', -1, 'Previous reviews'], ['\u203a', 1, 'Next reviews']].forEach(function (a) {
         var b = el('button', 'arrow', a[0]);
         b.type = 'button';
         b.setAttribute('aria-label', a[2]);

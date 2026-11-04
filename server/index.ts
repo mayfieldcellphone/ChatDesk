@@ -17,6 +17,7 @@ import { mediaRouter, postsRouter, startScheduledPosts } from './posts';
 import { reviewLinkRouter, reviewRequestsRouter, startReviewRequests } from './reviewRequests';
 import { backupRouter, startBackups } from './backup';
 import { conversationMediaRouter } from './media';
+import { listingsRouter } from './listings';
 import { all, db, type Connection } from './db';
 
 const app = express();
@@ -90,6 +91,7 @@ app.use('/api/review-tools', reviewRequestsRouter);
 app.use('/r', reviewLinkRouter);
 app.use('/api/backups', backupRouter);
 app.use('/api/media', conversationMediaRouter);
+app.use('/api/listings', listingsRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -107,7 +109,7 @@ if (process.env.NODE_ENV === 'production') {
     res.set('Cache-Control', 'no-cache');
     next();
   });
-  app.use(['/widget.js', '/reviews.js'], (_req, res, next) => {
+  app.use(['/widget.js', '/reviews.js', '/hours.js'], (_req, res, next) => {
     res.set('Cache-Control', 'public, max-age=300');
     next();
   });
