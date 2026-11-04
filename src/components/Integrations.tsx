@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api, timeAgo, type Business } from '../api';
 import ServerKeys from './ServerKeys';
+import Backups from './Backups';
 
 interface Connection {
   id: string;
@@ -186,6 +187,7 @@ export default function Integrations({ notice, onOpenSettings, isAdmin, business
         <RepairBillCard business={business} onSaved={onSaved} />
 
         {isAdmin && <div id="server-keys"><ServerKeys onChanged={load} /></div>}
+        {isAdmin && <Backups />}
 
         {!status.publicUrlSet && <SetupNote>PUBLIC_URL isn’t set on the server, so connections can’t finish signing in.</SetupNote>}
       </div>

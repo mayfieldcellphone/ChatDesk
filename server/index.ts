@@ -15,13 +15,22 @@ import { marketingRouter, startCampaigns, unsubscribeRouter } from './campaigns'
 import { attachReceptionist, receptionistRouter } from './receptionist';
 import { mediaRouter, postsRouter, startScheduledPosts } from './posts';
 import { reviewRequestsRouter, startReviewRequests } from './reviewRequests';
-import { all, type Connection } from './db';
+import { backupRouter, startBackups } from './backup';
+import { all, db, type Connection } from './db';
 
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-app.get('/api/health', (_req, res) => res.json({ ok: true }));
+// Uptime monitors check this; it fails if the database can't be read.
+app.get('/api/health', (_req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false });
+  }
+});
 
 // Google Business Profile OAuth routes (exact paths specified in requirements)
 app.get('/api/google/connect', (req, res) => {
@@ -77,6 +86,7 @@ app.use('/api/marketing', marketingRouter);
 app.use('/api/receptionist', receptionistRouter);
 app.use('/api/posts', postsRouter);
 app.use('/api/review-tools', reviewRequestsRouter);
+app.use('/api/backups', backupRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -111,6 +121,7 @@ startWeeklyReports();
 startCampaigns();
 startScheduledPosts();
 startReviewRequests();
+startBackups();
 
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));

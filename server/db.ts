@@ -2,8 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const file = process.env.DATABASE_FILE || path.join(process.cwd(), 'data', 'chatdesk.db');
-fs.mkdirSync(path.dirname(file), { recursive: true });
+export const databaseFile = process.env.DATABASE_FILE || path.join(process.cwd(), 'data', 'chatdesk.db');
+fs.mkdirSync(path.dirname(databaseFile), { recursive: true });
+const file = databaseFile;
 
 export const db = new DatabaseSync(file);
 
