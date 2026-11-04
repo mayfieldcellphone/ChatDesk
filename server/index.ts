@@ -14,6 +14,7 @@ import { reportsRouter, startWeeklyReports } from './reports';
 import { marketingRouter, startCampaigns, unsubscribeRouter } from './campaigns';
 import { attachReceptionist, receptionistRouter } from './receptionist';
 import { mediaRouter, postsRouter, startScheduledPosts } from './posts';
+import { reviewRequestsRouter, startReviewRequests } from './reviewRequests';
 import { all, type Connection } from './db';
 
 const app = express();
@@ -75,6 +76,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api/marketing', marketingRouter);
 app.use('/api/receptionist', receptionistRouter);
 app.use('/api/posts', postsRouter);
+app.use('/api/review-tools', reviewRequestsRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
@@ -92,7 +94,7 @@ if (process.env.NODE_ENV === 'production') {
     res.set('Cache-Control', 'no-cache');
     next();
   });
-  app.use('/widget.js', (_req, res, next) => {
+  app.use(['/widget.js', '/reviews.js'], (_req, res, next) => {
     res.set('Cache-Control', 'public, max-age=300');
     next();
   });
@@ -108,6 +110,7 @@ startReviewSync();
 startWeeklyReports();
 startCampaigns();
 startScheduledPosts();
+startReviewRequests();
 
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));

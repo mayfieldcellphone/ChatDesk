@@ -128,6 +128,8 @@ export interface ConversationDetail {
   tags: Tag[];
   /** The assistant is staying out of this conversation right now. */
   assistantPaused: boolean;
+  /** When the automatic review request goes out, if one is waiting. */
+  reviewDueAt: string | null;
   /** …because staff replied: it answers again 30 minutes after their last message. */
 }
 

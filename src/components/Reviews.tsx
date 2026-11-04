@@ -195,6 +195,8 @@ export default function Reviews({ business, onSaved, onOpenIntegrations }: Props
         )}
 
         <ReviewRequestSettings business={business} effectiveLink={data.reviewLink} onSaved={onSaved} />
+        <AutoReviewRequests />
+        <ReviewsWidgetSettings />
       </div>
     </div>
   );
@@ -397,5 +399,182 @@ function ReviewRequestSettings({ business, effectiveLink, onSaved }: { business:
         {status && <span className={`text-sm ${status.ok ? 'text-green-600' : 'text-red-600'}`}>{status.text}</span>}
       </div>
     </form>
+  );
+}
+
+const fieldInput = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none';
+
+/** Sends the review request on its own a while after a conversation is closed. */
+function AutoReviewRequests() {
+  const [data, setData] = useState<{ settings: { mode: 'off' | 'on_close'; delayHours: number; repeatDays: number }; sentLast30Days: number; automaticLast30Days: number; waiting: number } | null>(null);
+  const [form, setForm] = useState<{ mode: 'off' | 'on_close'; delayHours: number; repeatDays: number } | null>(null);
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const load = () =>
+    api<NonNullable<typeof data>>('/review-tools')
+      .then((d) => {
+        setData(d);
+        setForm(d.settings);
+      })
+      .catch((err) => setStatus({ ok: false, text: (err as Error).message }));
+  useEffect(() => {
+    load();
+  }, []);
+  if (!data || !form) return status ? <p className="text-sm text-red-600">{status.text}</p> : null;
+
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    setStatus(null);
+    try {
+      await api('/review-tools', { method: 'PATCH', body: form });
+      setStatus({ ok: true, text: 'Saved' });
+      load();
+    } catch (err) {
+      setStatus({ ok: false, text: (err as Error).message });
+    }
+  };
+
+  return (
+    <form onSubmit={save} className="space-y-4 rounded-xl bg-white p-6 shadow-sm">
+      <div>
+        <h2 className="font-semibold">Ask for reviews automatically</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          When you close a conversation after helping a customer, ChatBird sends the message above by text (or email if there’s no mobile). You can stop it from the conversation
+          before it goes.
+        </p>
+      </div>
+      <label className="flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" checked={form.mode === 'on_close'} onChange={(e) => setForm({ ...form, mode: e.target.checked ? 'on_close' : 'off' })} />
+        Ask for a review when I close a conversation
+      </label>
+      {form.mode === 'on_close' && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Send it</span>
+            <select className={fieldInput} value={form.delayHours} onChange={(e) => setForm({ ...form, delayHours: Number(e.target.value) })}>
+              {[[0, 'Straight away'], [1, '1 hour after'], [2, '2 hours after'], [4, '4 hours after'], [24, 'The next day']].map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Ask the same customer again after</span>
+            <select className={fieldInput} value={form.repeatDays} onChange={(e) => setForm({ ...form, repeatDays: Number(e.target.value) })}>
+              {[[90, '3 months'], [180, '6 months'], [365, '1 year'], [3650, 'Never ask again']].map(([v, l]) => (
+                <option key={v} value={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="text-xs text-slate-500 sm:col-span-2">
+            Only sent between 9am and 8pm, only where you replied to the customer yourself (not just an answered call), and never to anyone who unsubscribed.
+          </p>
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Save</button>
+        {status && <span className={`text-sm ${status.ok ? 'text-green-600' : 'text-red-600'}`}>{status.text}</span>}
+        <span className="ml-auto text-xs text-slate-500">
+          Last 30 days: {data.sentLast30Days} sent ({data.automaticLast30Days} automatic){data.waiting ? ` · ${data.waiting} waiting to go out` : ''}
+        </span>
+      </div>
+    </form>
+  );
+}
+
+interface WidgetData {
+  settings: { location: string; minRating: 4 | 5; count: number };
+  locations: { id: string; name: string }[];
+  widgetKey: string;
+  preview: { name: string; rating: number | null; total: number; reviews: { author: string; rating: number; text: string }[] };
+}
+
+/** The reviews widget for the business's own website (replaces Birdeye's). */
+function ReviewsWidgetSettings() {
+  const [data, setData] = useState<WidgetData | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    api<WidgetData>('/review-tools/widget').then(setData).catch((err) => setError((err as Error).message));
+  }, []);
+  if (!data) return error ? <p className="text-sm text-red-600">{error}</p> : null;
+
+  const change = async (settings: WidgetData['settings']) => {
+    setData({ ...data, settings });
+    try {
+      const r = await api<Pick<WidgetData, 'settings' | 'preview'>>('/review-tools/widget', { method: 'PATCH', body: settings });
+      setData((d) => (d ? { ...d, ...r } : d));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  const snippet = `<script src="${location.origin}/reviews.js" data-key="${data.widgetKey}" async></script>`;
+  const s = data.settings;
+
+  return (
+    <section className="space-y-4 rounded-xl bg-white p-6 shadow-sm">
+      <div>
+        <h2 className="font-semibold">Reviews on your website</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Shows your Google rating and your newest good reviews, with a “Leave us a review” button. It updates by itself as new reviews come in. Paste the code where the reviews
+          should appear (it replaces the Birdeye reviews widget).
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {data.locations.length > 1 && (
+          <label className="text-sm">
+            <span className="mb-1 block font-medium text-slate-700">Location</span>
+            <select className={fieldInput} value={s.location} onChange={(e) => change({ ...s, location: e.target.value })}>
+              <option value="all">All locations</option>
+              {data.locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-slate-700">Show reviews with</span>
+          <select className={fieldInput} value={s.minRating} onChange={(e) => change({ ...s, minRating: Number(e.target.value) as 4 | 5 })}>
+            <option value={5}>5 stars only</option>
+            <option value={4}>4 and 5 stars</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block font-medium text-slate-700">How many</span>
+          <select className={fieldInput} value={s.count} onChange={(e) => change({ ...s, count: Number(e.target.value) })}>
+            {[3, 6, 9, 12].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <p className="text-sm text-slate-600">
+        Shows: <b>{data.preview.name}</b> · {data.preview.rating ? `${data.preview.rating.toFixed(1)} ★` : 'no rating yet'} from {data.preview.total} Google reviews ·{' '}
+        {data.preview.reviews.length} review{data.preview.reviews.length === 1 ? '' : 's'} with words
+      </p>
+      <div>
+        <span className="mb-1 block text-sm font-medium text-slate-700">Website code</span>
+        <code className="block break-all rounded-md bg-slate-900 p-3 text-xs text-slate-100">{snippet}</code>
+        <div className="mt-2 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(snippet).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            })}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+          >
+            {copied ? 'Copied!' : 'Copy code'}
+          </button>
+          <span className="text-xs text-slate-500">To put it in a set spot, add <code>{'<div id="chatbird-reviews"></div>'}</code> there.</span>
+        </div>
+      </div>
+    </section>
   );
 }

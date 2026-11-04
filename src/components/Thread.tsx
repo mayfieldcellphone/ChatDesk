@@ -226,9 +226,14 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   };
 
   const setStatus = async (status: 'open' | 'closed') => {
-    await api(`/conversations/${conversationId}`, { method: 'PATCH', body: { status } });
-    setConversation((c) => (c ? { ...c, status } : c));
+    const r = await api<{ reviewDueAt: string | null }>(`/conversations/${conversationId}`, { method: 'PATCH', body: { status } });
+    setConversation((c) => (c ? { ...c, status, reviewDueAt: r.reviewDueAt } : c));
     onChanged();
+  };
+
+  const cancelReview = async () => {
+    await api(`/conversations/${conversationId}`, { method: 'PATCH', body: { cancelReviewRequest: true } });
+    setConversation((c) => (c ? { ...c, reviewDueAt: null } : c));
   };
 
   if (!conversation) {
@@ -325,6 +330,14 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
           {conversation.status === 'open' ? 'Close' : 'Reopen'}
         </button>
       </header>
+      {conversation.reviewDueAt && conversation.status === 'closed' && (
+        <div className="flex items-center gap-3 border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-900 md:px-6">
+          ⭐ Review request goes out {new Date(conversation.reviewDueAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })} (between 9am and 8pm).
+          <button onClick={cancelReview} className="ml-auto font-medium text-amber-900 underline">
+            Don’t send
+          </button>
+        </div>
+      )}
       {details && (
         <form onSubmit={saveDetails} className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm md:px-6">
           <input className="w-40 rounded border border-slate-300 px-2 py-1" placeholder="Mobile" value={details.phone} onChange={(e) => setDetails({ ...details, phone: e.target.value })} />

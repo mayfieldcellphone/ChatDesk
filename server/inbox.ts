@@ -17,6 +17,7 @@ import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
 import { normalizeRepairbillUrl, sendLead } from './repairbill';
 import { leadToken } from './leads';
+import { cancelReviewRequest, recordReviewRequest, reviewRequestText, scheduleReviewRequest } from './reviewRequests';
 import { assistantPausedNow, decide, faqNeedsEditing, parseTable } from './assistant';
 import { pushPublicKey, pushToBusiness } from './push';
 import { createBusiness, setSession } from './auth';
@@ -659,6 +660,7 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       defaultChannel: defaultChannel(loadBusiness(businessId), conversation, contact),
       tags: tagsByConversation([conversation.id]).get(conversation.id) ?? [],
       assistantPaused: assistantPausedNow(conversation.id),
+      reviewDueAt: (conversation as Conversation & { review_due_at?: string | null }).review_due_at ?? null,
     },
     messages: loadMessages(conversation.id),
   });
@@ -698,14 +700,12 @@ inboxRouter.post('/conversations/:id/review-request', async (req, res) => {
   const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
   const channel = CHANNELS.includes(req.body.channel) ? (req.body.channel as Channel) : defaultChannel(business, conversation, contact);
   if (!channel) return res.status(400).json({ error: 'There’s no way to message this customer.' });
-  const first = contact.name.trim().split(/\s+/)[0];
-  const body = business.review_request_text
-    .replace(/\{name\}/gi, /^\+?\d[\d\s]+$/.test(first) ? 'there' : first)
-    .replace(/\{business\}/gi, business.name)
-    .replace(/\{link\}/gi, link);
+  const body = reviewRequestText(business, contact, link);
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
   try {
     const message = await sendToCustomer(business, conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
+    recordReviewRequest(businessId, contact.id, conversation.id, false);
+    cancelReviewRequest(conversation.id);
     res.status(201).json({ message });
   } catch (err) {
     if (err instanceof DeliveryError) return res.status(400).json({ error: err.message });
@@ -822,11 +822,19 @@ inboxRouter.patch('/conversations/:id', (req, res) => {
     run('UPDATE conversations SET assistant_paused = ? WHERE id = ?', req.body.assistantPaused ? 1 : 0, conversation.id);
     if (req.body.status === undefined) return res.json({ ok: true });
   }
+  if (req.body.cancelReviewRequest) {
+    cancelReviewRequest(conversation.id);
+    if (req.body.status === undefined) return res.json({ ok: true, reviewDueAt: null });
+  }
   const status = req.body.status;
   if (status !== 'open' && status !== 'closed') return res.status(400).json({ error: 'Status must be open or closed' });
   run('UPDATE conversations SET status = ? WHERE id = ?', status, conversation.id);
   publish(`biz:${businessId}`, { type: 'status', conversationId: conversation.id, status });
-  res.json({ ok: true });
+  // Closing after helping a customer queues the automatic review request (if it's on); reopening stops it.
+  let reviewDueAt: string | null = null;
+  if (status === 'closed' && conversation.status !== 'closed') reviewDueAt = scheduleReviewRequest(loadBusiness(businessId), { ...conversation, status });
+  if (status === 'open') cancelReviewRequest(conversation.id);
+  res.json({ ok: true, reviewDueAt });
 });
 
 // One live connection follows every business this login runs, for the combined inbox and alerts.

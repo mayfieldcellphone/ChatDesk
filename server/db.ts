@@ -386,6 +386,25 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 `);
+// Automatic review requests (reviewRequests.ts): 'off' | 'on_close'.
+addColumn('businesses', 'review_auto_mode', "TEXT NOT NULL DEFAULT 'off'");
+addColumn('businesses', 'review_auto_delay_hours', 'INTEGER NOT NULL DEFAULT 2');
+addColumn('businesses', 'review_auto_repeat_days', 'INTEGER NOT NULL DEFAULT 180');
+// Set when a conversation is closed and a review request is waiting to go out.
+addColumn('conversations', 'review_due_at', 'TEXT');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS review_requests (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+    automatic INTEGER NOT NULL DEFAULT 0,
+    sent_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS review_requests_contact ON review_requests(contact_id, sent_at);
+`);
+// Reviews widget for the business's own website (public/reviews.js): which reviews it shows.
+addColumn('businesses', 'reviews_widget', "TEXT NOT NULL DEFAULT '{}'");
 addColumn('social_posts', 'plan_id', 'TEXT REFERENCES post_plans(id) ON DELETE SET NULL');
 
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
@@ -441,6 +460,10 @@ export interface Business {
   receptionist_urgent_number: string | null;
   receptionist_notes: string;
   receptionist_disclosure: string;
+  review_auto_mode: 'off' | 'on_close';
+  review_auto_delay_hours: number;
+  review_auto_repeat_days: number;
+  reviews_widget: string;
   address: string;
   pricing_mode: 'off' | 'from' | 'exact';
   pricing_rules: string;

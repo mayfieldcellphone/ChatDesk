@@ -9,6 +9,7 @@ import { isOpen } from './hours';
 import { onInboundMessage } from './inbound';
 import { rateLimit } from './rateLimit';
 import { forwardLead, type LeadType } from './repairbill';
+import { widgetReviews } from './reviewRequests';
 
 // Public API used by the embeddable widget (public/widget.js) on customers' websites.
 export const widgetRouter = Router();
@@ -73,6 +74,13 @@ widgetRouter.get('/:key/config', (req, res) => {
     // Shortcuts to the same options, shown above the closed chat button.
     buttons: Boolean(business.widget_buttons),
   });
+});
+
+// The reviews widget (public/reviews.js) on the business's own website.
+widgetRouter.get('/:key/reviews', (req, res) => {
+  const business = loadBusiness(req, res);
+  if (!business) return;
+  res.set('Cache-Control', 'public, max-age=600').json(widgetReviews(business));
 });
 
 interface Start {
