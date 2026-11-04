@@ -150,6 +150,21 @@ export async function sendMetaMessage(connection: Connection, recipientId: strin
   }
 }
 
+/** Sends a picture over Messenger or Instagram (Meta fetches it from the link). */
+export async function sendMetaImage(connection: Connection, recipientId: string, url: string) {
+  const { pageId } = JSON.parse(connection.meta) as { pageId: string };
+  try {
+    const res = await graph<{ message_id: string }>(`/${pageId}/messages`, {
+      method: 'POST',
+      token: decrypt(connection.access_token),
+      body: { recipient: { id: recipientId }, messaging_type: 'RESPONSE', message: { attachment: { type: 'image', payload: { url, is_reusable: false } } } },
+    });
+    return res.message_id;
+  } catch (err) {
+    throw new MetaError((err as Error).message);
+  }
+}
+
 // ---------- Webhook ----------
 
 export const metaWebhookRouter = Router();

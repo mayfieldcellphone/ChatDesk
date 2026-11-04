@@ -67,3 +67,23 @@ export function isOpen(business: Pick<Business, 'hours_enabled' | 'hours' | 'tim
   const today = parseHours(business.hours)[day];
   return Boolean(today && time >= today.open && time < today.close);
 }
+
+const SHORT: Record<Day, string> = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+const clock = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''}${h < 12 ? 'am' : 'pm'}`;
+};
+
+/** Opening hours in one line for customers, e.g. "Mon–Fri 9am–5pm, Sat 10am–4pm, Sun closed". */
+export function hoursSummary(business: Pick<Business, 'hours_enabled' | 'hours'>) {
+  if (!business.hours_enabled) return '';
+  const hours = parseHours(business.hours);
+  const label = (d: Day) => (hours[d] ? `${clock(hours[d]!.open)}–${clock(hours[d]!.close)}` : 'closed');
+  const groups: { from: Day; to: Day; text: string }[] = [];
+  for (const d of DAYS) {
+    const last = groups.at(-1);
+    if (last && last.text === label(d)) last.to = d;
+    else groups.push({ from: d, to: d, text: label(d) });
+  }
+  return groups.map((g) => `${SHORT[g.from]}${g.to !== g.from ? `–${SHORT[g.to]}` : ''} ${g.text}`).join(', ');
+}

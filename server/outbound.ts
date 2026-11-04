@@ -1,8 +1,9 @@
 import { get, insertMessage, type Business, type Channel, type Connection, type Contact, type Conversation, type Message, type MessageOptions } from './db';
 import { isVisitorOnline, publish } from './events';
-import { metaConfigured, sendMetaMessage } from './meta';
+import { metaConfigured, sendMetaImage, sendMetaMessage } from './meta';
 import { sendSms, smsConfigured } from './twilio';
 import { emailConfigured, emailCustomer } from './notify';
+import { publicMediaUrl } from './media';
 
 export class DeliveryError extends Error {}
 
@@ -53,14 +54,27 @@ export async function sendToCustomer(
   }
 
   let externalId: string | null = null;
+  const photo = options.mediaId ? publicMediaUrl(options.mediaId) : null;
   try {
     if (channel === 'sms') {
-      await sendSms(business.sms_number!, contact.phone!, body);
+      if (photo) {
+        try {
+          await sendSms(business.sms_number!, contact.phone!, body, photo);
+        } catch (err) {
+          // Picture messages aren't available on every number or network: send the photo as a link.
+          console.warn(`Picture message not sent (${(err as Error).message}); sending a link instead`);
+          await sendSms(business.sms_number!, contact.phone!, [body, `📷 ${photo}`].filter(Boolean).join('\n'));
+        }
+      } else {
+        await sendSms(business.sms_number!, contact.phone!, body);
+      }
     } else if (channel === 'email') {
-      await emailCustomer(business, contact, body);
+      await emailCustomer(business, contact, [body, photo && `Photo: ${photo}`].filter(Boolean).join('\n\n'));
     } else if (channel === 'facebook' || channel === 'instagram') {
       const connection = get<Connection>('SELECT * FROM connections WHERE id = ?', conversation.connection_id!)!;
-      externalId = await sendMetaMessage(connection, (channel === 'facebook' ? contact.facebook_id : contact.instagram_id)!, body);
+      const to = (channel === 'facebook' ? contact.facebook_id : contact.instagram_id)!;
+      if (body) externalId = await sendMetaMessage(connection, to, body);
+      if (photo) externalId = (await sendMetaImage(connection, to, photo)) ?? externalId;
     }
   } catch (err) {
     throw new DeliveryError(`${CHANNEL_NAMES[channel][0].toUpperCase()}${CHANNEL_NAMES[channel].slice(1)} not sent: ${(err as Error).message}`);
@@ -72,7 +86,7 @@ export async function sendToCustomer(
   publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: full });
   publish(`conv:${conversation.id}`, {
     type: 'message',
-    message: { id: message.id, direction: 'out', body: message.body, created_at: message.created_at },
+    message: { id: message.id, direction: 'out', body: message.body, created_at: message.created_at, media_url: photo },
   });
   return full;
 }

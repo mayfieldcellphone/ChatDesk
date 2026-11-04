@@ -25,8 +25,15 @@ async function post(path: string, params: Record<string, string>) {
   return res.json() as Promise<{ sid: string }>;
 }
 
-export async function sendSms(from: string, to: string, body: string) {
-  await post('/Messages.json', { From: from, To: to, Body: body });
+export async function sendSms(from: string, to: string, body: string, mediaUrl?: string) {
+  await post('/Messages.json', { From: from, To: to, Body: body, ...(mediaUrl ? { MediaUrl: mediaUrl } : {}) });
+}
+
+/** Downloads a photo a customer texted (Twilio media links may need the account login). */
+export async function fetchTwilioMedia(url: string) {
+  const res = await fetch(url, { headers: { Authorization: authHeader() }, signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`Twilio media ${res.status}`);
+  return { mime: res.headers.get('content-type') || 'application/octet-stream', data: Buffer.from(await res.arrayBuffer()) };
 }
 
 /** Places an outbound call that runs the given TwiML once answered. */

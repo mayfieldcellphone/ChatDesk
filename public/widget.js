@@ -416,6 +416,18 @@
 
   function appendMessageEl(m) {
     var bubble = el('div', 'msg ' + m.direction, m.body);
+    if (m.media_url) {
+      var link = el('a');
+      link.href = m.media_url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      var img = el('img');
+      img.src = m.media_url;
+      img.alt = 'Photo';
+      img.style.cssText = 'display:block;max-width:100%;border-radius:10px;margin-top:' + (m.body ? '6px' : '0');
+      link.appendChild(img);
+      bubble.appendChild(link);
+    }
     bubble.appendChild(el('div', 'time', formatTime(m.created_at)));
     bodyEl.appendChild(bubble);
   }

@@ -418,6 +418,11 @@ db.exec('CREATE UNIQUE INDEX IF NOT EXISTS review_requests_token ON review_reque
 addColumn('businesses', 'reviews_widget', "TEXT NOT NULL DEFAULT '{}'");
 // When a review was shared as a post (Reviews → 📣 Share).
 addColumn('reviews', 'shared_at', 'TEXT');
+// Photos in conversations (media.ts). Customers' photos are private: only the team can see them.
+addColumn('messages', 'media_id', 'TEXT');
+addColumn('media', 'private', 'INTEGER NOT NULL DEFAULT 0');
+// Starter saved replies (address, hours, review link) were added once.
+addColumn('businesses', 'saved_replies_seeded', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('social_posts', 'plan_id', 'TEXT REFERENCES post_plans(id) ON DELETE SET NULL');
 
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
@@ -528,6 +533,7 @@ export interface Message {
   duration: number | null;
   external_id: string | null;
   created_at: string;
+  media_id?: string | null;
 }
 
 export type Provider = 'google' | 'facebook' | 'instagram';
@@ -619,6 +625,8 @@ export interface MessageOptions {
   externalId?: string | null;
   /** An incoming line that shouldn't count as unread or reopen the conversation (a call still ringing). */
   quiet?: boolean;
+  /** A photo with the message (media table). */
+  mediaId?: string | null;
 }
 
 export function insertMessage(
@@ -626,7 +634,7 @@ export function insertMessage(
   direction: 'in' | 'out',
   channel: Channel,
   body: string,
-  { authorId = null, automated = false, assistant = false, kind = 'text', recordingSid = null, duration = null, externalId = null, quiet = false }: MessageOptions = {},
+  { authorId = null, automated = false, assistant = false, kind = 'text', recordingSid = null, duration = null, externalId = null, quiet = false, mediaId = null }: MessageOptions = {},
 ): Message {
   const message: Message = {
     id: newId(),
@@ -641,11 +649,12 @@ export function insertMessage(
     duration,
     external_id: externalId,
     created_at: now(),
+    media_id: mediaId,
   };
   run(
-    `INSERT INTO messages (id, conversation_id, direction, channel, body, author_id, automated, kind, recording_sid, duration, external_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    message.id, message.conversation_id, direction, channel, body, authorId, message.automated, kind, recordingSid, duration, externalId, message.created_at,
+    `INSERT INTO messages (id, conversation_id, direction, channel, body, author_id, automated, kind, recording_sid, duration, external_id, created_at, media_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    message.id, message.conversation_id, direction, channel, body, authorId, message.automated, kind, recordingSid, duration, externalId, message.created_at, mediaId,
   );
   // A customer message reopens the conversation and counts as unread; a staff reply clears unread.
   // Automated replies (away messages) leave unread alone so the team still sees the chat needs an answer.

@@ -22,6 +22,9 @@ export interface Business {
   reviewLink: string | null;
   /** The link review requests use: the owner's own, or the one from Google Business Profile. */
   reviewLinkEffective: string | null;
+  /** Opening hours in one line, e.g. "Mon–Fri 9am–5pm, Sat closed" ('' when office hours are off). */
+  hoursSummary: string;
+  address: string;
   reviewRequestText: string;
   websiteUrl: string | null;
   websiteImportedAt: string | null;
@@ -75,9 +78,19 @@ export interface SavedReply {
 }
 
 /** Fills {name} (customer's first name) and {business} placeholders in a saved reply. */
-export function fillReply(body: string, contactName: string, businessName: string) {
-  const first = contactName.trim().split(/\s+/)[0] || 'there';
-  return body.replace(/\{name\}/gi, first).replace(/\{business\}/gi, businessName);
+/** Fills a saved reply: {name}, {business}, and the shop's {address}, {hours}, {phone}, {website} and {review_link}. */
+export function fillReply(body: string, contactName: string, business: Pick<Business, 'name' | 'address' | 'hoursSummary' | 'widgetCallNumber' | 'websiteUrl' | 'reviewLinkEffective'>) {
+  const first = contactName.trim().split(/\s+/)[0];
+  const values: Record<string, string> = {
+    name: first && !/^\+?\d/.test(first) ? first : 'there',
+    business: business.name,
+    address: business.address || '[add your address in Settings → AI phone receptionist]',
+    hours: business.hoursSummary || '[turn on office hours in Settings]',
+    phone: business.widgetCallNumber ?? '',
+    website: business.websiteUrl ?? '',
+    review_link: business.reviewLinkEffective || '[add your review link on the Reviews page]',
+  };
+  return body.replace(/\{(name|business|address|hours|phone|website|review_link)\}/gi, (_, key: string) => values[key.toLowerCase()]);
 }
 
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
@@ -113,6 +126,8 @@ export interface Message {
   kind: 'text' | 'call' | 'voicemail' | 'quote' | 'callback' | 'booking' | 'enquiry';
   duration: number | null;
   created_at: string;
+  /** A photo with the message: shown from /api/media/:id. */
+  media_id?: string | null;
 }
 
 export interface ConversationDetail {

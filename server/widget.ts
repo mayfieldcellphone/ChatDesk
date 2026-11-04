@@ -10,6 +10,7 @@ import { onInboundMessage } from './inbound';
 import { rateLimit } from './rateLimit';
 import { forwardLead, type LeadType } from './repairbill';
 import { widgetReviews } from './reviewRequests';
+import { messageMedia } from './media';
 import { classifyVisit } from './leadSource';
 
 // Public API used by the embeddable widget (public/widget.js) on customers' websites.
@@ -26,7 +27,7 @@ widgetRouter.use((req, res, next) => {
 });
 
 const MAX_MESSAGE = 2000;
-const publicMessage = (m: Message) => ({ id: m.id, direction: m.direction, body: m.body, created_at: m.created_at });
+const publicMessage = (m: Message) => ({ id: m.id, direction: m.direction, body: m.body, created_at: m.created_at, media_url: messageMedia(m, false) });
 
 function loadBusiness(req: Request, res: Response) {
   const business = get<Business>('SELECT * FROM businesses WHERE widget_key = ?', req.params.key);

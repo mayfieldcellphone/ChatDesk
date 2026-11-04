@@ -42,7 +42,7 @@ const mediaUrl = (id: string) => `${publicUrl()}/media/${id}.jpg`;
 
 mediaRouter.get('/:file', (req, res) => {
   const id = req.params.file.replace(/\.jpg$/, '');
-  const row = db.prepare('SELECT mime, data FROM media WHERE id = ?').get(id) as { mime: string; data: Uint8Array } | undefined;
+  const row = db.prepare('SELECT mime, data FROM media WHERE id = ? AND private = 0').get(id) as { mime: string; data: Uint8Array } | undefined;
   if (!row) return res.sendStatus(404);
   res.set('Cache-Control', 'public, max-age=31536000, immutable').type(row.mime).send(Buffer.from(row.data));
 });

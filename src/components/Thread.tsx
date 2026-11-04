@@ -29,6 +29,8 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   const [suggesting, setSuggesting] = useState(false);
   const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [photo, setPhoto] = useState<{ id: string | null; preview: string; uploading: boolean } | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
   const [pickerQuery, setPickerQuery] = useState('');
   const [calling, setCalling] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -86,22 +88,67 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   const send = async (e?: FormEvent) => {
     e?.preventDefault();
     const body = draft.trim();
-    if (!body || sending) return;
+    if ((!body && !photo) || sending || photo?.uploading) return;
     setSending(true);
     setError('');
     try {
       const { message } = await api<{ message: Message }>(`/conversations/${conversationId}/messages`, {
         method: 'POST',
-        body: { body, channel },
+        body: { body, channel, mediaId: photo?.id },
       });
       setMessages((list) => (list.some((m) => m.id === message.id) ? list : [...list, message]));
       setDraft('');
+      setPhoto(null);
       onChanged();
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setSending(false);
     }
+  };
+
+  /** A photo from the camera or library, shrunk and turned into a JPEG here, then uploaded ready to send. */
+  const addPhoto = async (file: File) => {
+    setError('');
+    const preview = URL.createObjectURL(file);
+    setPhoto({ id: null, preview, uploading: true });
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error('That file isn’t a photo ChatBird can read'));
+        i.src = preview;
+      });
+      const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not read the photo'))), 'image/jpeg', 0.85));
+      const res = await fetch('/api/media', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: blob });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'The photo didn’t upload');
+      setPhoto({ id: data.id, preview, uploading: false });
+    } catch (err) {
+      setPhoto(null);
+      setError((err as Error).message);
+    }
+  };
+
+  /** The shop's details as a short message: phones offer "Add to contacts" when they tap the number. */
+  const insertContactCard = () => {
+    const lines = [
+      business.name,
+      business.widgetCallNumber && `📞 ${business.widgetCallNumber}`,
+      business.smsNumber && `💬 Text us: ${business.smsNumber.replace(/^\+61(\d{3})(\d{3})(\d{3})$/, '0$1 $2 $3')}`,
+      business.address && `📍 ${business.address}`,
+      business.websiteUrl && `🌐 ${business.websiteUrl.replace(/^https?:\/\//, '')}`,
+    ].filter(Boolean);
+    setDraft((d) => (d.trim() ? `${d.trimEnd()}\n\n${lines.join('\n')}` : lines.join('\n')));
+    textarea.current?.focus();
   };
 
   const suggest = async () => {
@@ -130,7 +177,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   };
 
   const insertSavedReply = (reply: SavedReply) => {
-    const text = fillReply(reply.body, conversation?.contact.name ?? '', business.name);
+    const text = fillReply(reply.body, conversation?.contact.name ?? '', business);
     setDraft((d) => (d.startsWith('/') || !d.trim() ? text : `${d.trimEnd()} ${text}`));
     setPickerOpen(false);
     setPickerQuery('');
@@ -253,6 +300,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   }
 
   const { contact } = conversation;
+  const tool = 'flex items-center gap-1 rounded-full px-2.5 py-1.5 text-slate-700 hover:bg-slate-100 disabled:opacity-40';
 
   return (
     <div className="flex h-full flex-col">
@@ -409,7 +457,12 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
                       : 'rounded-bl-sm border border-slate-200 bg-white'
                 }`}
               >
-                {m.body}
+                {m.media_id && (
+                  <a href={`/api/media/${m.media_id}`} target="_blank" rel="noreferrer" className={`block ${m.body && m.body !== '📷 Photo' ? 'mb-1.5' : ''}`}>
+                    <img src={`/api/media/${m.media_id}`} alt="Photo" className="max-h-72 rounded-lg" />
+                  </a>
+                )}
+                {m.media_id && m.body === '📷 Photo' ? null : m.body}
               </div>
               <div className={`mt-1 text-[11px] text-slate-400 ${m.direction === 'out' ? 'text-right' : ''}`}>
                 {m.automated === 2 ? '🤖 Assistant · ' : m.automated ? 'Sent automatically · ' : m.direction === 'out' && m.author_name ? `${m.author_name} · ` : ''}
@@ -458,7 +511,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
                   className="block w-full border-b border-slate-50 px-3 py-2 text-left hover:bg-blue-50"
                 >
                   <div className="text-sm font-medium">{r.title}</div>
-                  <div className="truncate text-xs text-slate-500">{fillReply(r.body, contact.name, business.name)}</div>
+                  <div className="truncate text-xs text-slate-500">{fillReply(r.body, contact.name, business)}</div>
                 </button>
               ))
             )}
@@ -485,40 +538,18 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
           {channel === 'email' && business.replyEmailEffective && (
             <span className="text-slate-500">Their reply goes to {business.replyEmailEffective}.</span>
           )}
-          <span className="ml-auto flex gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setPickerOpen(!pickerOpen);
-                setPickerQuery('');
-              }}
-              className="rounded-full bg-slate-100 px-3 py-1 text-slate-700 hover:bg-slate-200"
-              title="Insert a saved reply (or type / in the box)"
-            >
-              Saved replies
-            </button>
-            <button
-              type="button"
-              onClick={requestReview}
-              disabled={conversation.replyChannels.length === 0}
-              className="rounded-full bg-amber-100 px-3 py-1 text-amber-800 hover:bg-amber-200 disabled:opacity-40"
-              title={business.reviewLinkEffective ? 'Send your Google review link to this customer' : 'Connect Google Business Profile or add a review link first (Reviews page)'}
-            >
-              ⭐ Ask for review
-            </button>
-            {business.aiAvailable && (
-              <button
-                type="button"
-                onClick={suggest}
-                disabled={suggesting}
-                className="rounded-full bg-violet-100 px-3 py-1 text-violet-700 hover:bg-violet-200 disabled:opacity-60"
-                title="Let AI draft a reply for you to check before sending"
-              >
-                {suggesting ? 'Thinking…' : '✨ Suggest reply'}
-              </button>
-            )}
-          </span>
         </div>
+        {photo && (
+          <div className="mb-2 flex items-center gap-2">
+            <span className="relative">
+              <img src={photo.preview} alt="Photo to send" className={`h-16 w-16 rounded-md object-cover ${photo.uploading ? 'opacity-50' : ''}`} />
+              <button type="button" onClick={() => setPhoto(null)} className="absolute -right-1.5 -top-1.5 h-5 w-5 rounded-full bg-slate-900 text-xs text-white" aria-label="Remove photo">
+                ×
+              </button>
+            </span>
+            <span className="text-xs text-slate-500">{photo.uploading ? 'Getting the photo ready…' : channel === 'sms' ? 'Sent as a picture message' : 'Sent with your message'}</span>
+          </div>
+        )}
         <div className="flex gap-2">
           <textarea
             ref={textarea}
@@ -544,10 +575,55 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
             className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
           />
           <button
-            disabled={sending || !draft.trim()}
+            disabled={sending || (!draft.trim() && !photo?.id) || !!photo?.uploading}
             className="rounded-md bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >
             Send
+          </button>
+        </div>
+        {/* Tools, like a phone's messaging app: photo, contact card, saved replies, AI, review link. */}
+        <div className="mt-2 flex flex-wrap items-center gap-1 text-xs [&_button]:whitespace-nowrap">
+          <input
+            ref={photoInput}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = '';
+              if (f) addPhoto(f);
+            }}
+          />
+          <button type="button" onClick={() => photoInput.current?.click()} className={tool} title="Take a photo or choose one from your library">
+            📷 <span>Photo</span>
+          </button>
+          <button type="button" onClick={insertContactCard} className={tool} title="Add your shop’s name, number, address and website so they can save it">
+            👤 <span>Contact card</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPickerOpen(!pickerOpen);
+              setPickerQuery('');
+            }}
+            className={tool}
+            title="Insert a saved reply (or type / in the box)"
+          >
+            📋 <span>Saved replies</span>
+          </button>
+          {business.aiAvailable && (
+            <button type="button" onClick={suggest} disabled={suggesting} className={`${tool} text-violet-700`} title="Let AI draft a reply for you to check before sending">
+              ✨ <span>{suggesting ? 'Thinking…' : 'AI reply'}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={requestReview}
+            disabled={conversation.replyChannels.length === 0}
+            className={`${tool} text-amber-800`}
+            title={business.reviewLinkEffective ? 'Send your Google review link to this customer' : 'Connect Google Business Profile or add a review link first (Reviews page)'}
+          >
+            ⭐ <span>Ask for review</span>
           </button>
         </div>
       </form>

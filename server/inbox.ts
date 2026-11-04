@@ -7,7 +7,7 @@ import {
 } from './db';
 import { isVisitorOnline, publish, subscribe } from './events';
 import { requireAuth } from './auth';
-import { isOpen, parseHours, validateHours, validTimezone } from './hours';
+import { hoursSummary, isOpen, parseHours, validateHours, validTimezone } from './hours';
 import { emailConfigured, replyAddress } from './notify';
 import { aiConfigured, AiError, suggestReply } from './ai';
 import { rateLimit } from './rateLimit';
@@ -43,6 +43,8 @@ function publicBusiness(b: Business) {
     hoursEnabled: Boolean(b.hours_enabled),
     timezone: b.timezone,
     hours: parseHours(b.hours),
+    hoursSummary: hoursSummary(b),
+    address: b.address,
     awayMessage: b.away_message,
     openNow: isOpen(b),
     aiNotes: b.ai_notes,
@@ -518,7 +520,21 @@ function readReply(body: Record<string, unknown>) {
   return title && text ? { title, body: text } : null;
 }
 
+// Every business starts with replies for the things customers ask most; they fill in from Settings.
+const STARTER_REPLIES = [
+  ['Our address', 'We’re at {address}. See you soon!'],
+  ['Opening hours', 'Our opening hours: {hours}'],
+  ['Review link', 'Thanks {name}! If you have a minute, we’d really appreciate a quick Google review: {review_link}'],
+] as const;
+
 inboxRouter.get('/saved-replies', (req, res) => {
+  if (run('UPDATE businesses SET saved_replies_seeded = 1 WHERE id = ? AND saved_replies_seeded = 0', req.session!.businessId).changes) {
+    for (const [title, body] of STARTER_REPLIES) {
+      if (!get('SELECT 1 FROM saved_replies WHERE business_id = ? AND title = ? COLLATE NOCASE', req.session!.businessId, title)) {
+        run('INSERT INTO saved_replies (id, business_id, title, body, created_at) VALUES (?, ?, ?, ?, ?)', newId(), req.session!.businessId, title, body, now());
+      }
+    }
+  }
   const replies = all<SavedReply>('SELECT * FROM saved_replies WHERE business_id = ? ORDER BY title COLLATE NOCASE', req.session!.businessId);
   res.json({ savedReplies: replies.map(publicReply) });
 });
@@ -675,13 +691,15 @@ inboxRouter.post('/conversations/:id/messages', async (req, res) => {
 
   const body = String(req.body.body ?? '').trim();
   const channel = String(req.body.channel ?? '') as Channel;
-  if (!body) return res.status(400).json({ error: 'Message is empty' });
+  const mediaId = req.body.mediaId ? get<{ id: string }>('SELECT id FROM media WHERE id = ? AND business_id = ? AND private = 0', String(req.body.mediaId), businessId)?.id : null;
+  if (req.body.mediaId && !mediaId) return res.status(400).json({ error: 'That photo is no longer available. Add it again.' });
+  if (!body && !mediaId) return res.status(400).json({ error: 'Message is empty' });
   if (body.length > 1600) return res.status(400).json({ error: 'Message is too long (1600 characters max)' });
   if (!CHANNELS.includes(channel)) return res.status(400).json({ error: 'Choose how to send the reply' });
 
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
   try {
-    const message = await sendToCustomer(loadBusiness(businessId), conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
+    const message = await sendToCustomer(loadBusiness(businessId), conversation, channel, body, { authorId: userId, authorName: author?.name ?? null, mediaId });
     res.status(201).json({ message });
   } catch (err) {
     if (err instanceof DeliveryError) return res.status(err.message.includes('not sent') ? 502 : 400).json({ error: err.message });

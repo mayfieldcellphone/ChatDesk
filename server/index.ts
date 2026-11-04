@@ -16,6 +16,7 @@ import { attachReceptionist, receptionistRouter } from './receptionist';
 import { mediaRouter, postsRouter, startScheduledPosts } from './posts';
 import { reviewLinkRouter, reviewRequestsRouter, startReviewRequests } from './reviewRequests';
 import { backupRouter, startBackups } from './backup';
+import { conversationMediaRouter } from './media';
 import { all, db, type Connection } from './db';
 
 const app = express();
@@ -88,6 +89,7 @@ app.use('/api/posts', postsRouter);
 app.use('/api/review-tools', reviewRequestsRouter);
 app.use('/r', reviewLinkRouter);
 app.use('/api/backups', backupRouter);
+app.use('/api/media', conversationMediaRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 
