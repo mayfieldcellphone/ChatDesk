@@ -31,6 +31,7 @@ interface PostRow {
   status: 'scheduled' | 'posting' | 'done' | 'partial' | 'failed' | 'cancelled';
   results: string;
   created_at: string;
+  plan_id: string | null;
 }
 
 type ChannelResult = { ok: true; url: string } | { ok: false; error: string };
@@ -72,6 +73,7 @@ function publicPost(p: PostRow) {
     offer: p.offer ? (JSON.parse(p.offer) as GoogleOffer) : null,
     scheduledAt: p.scheduled_at,
     status: p.status,
+    planId: p.plan_id,
     createdAt: p.created_at,
     results: JSON.parse(p.results) as Record<string, ChannelResult & { name: string; provider: string }>,
   };
@@ -80,10 +82,26 @@ function publicPost(p: PostRow) {
 postsRouter.get('/', (req, res) => {
   const { businessId } = req.session!;
   const business = get<Business>('SELECT * FROM businesses WHERE id = ?', businessId)!;
-  const posts = all<PostRow>('SELECT * FROM social_posts WHERE business_id = ? ORDER BY created_at DESC LIMIT 50', businessId);
+  // Upcoming auto posts are listed under their plan, not in the history.
+  const posts = all<PostRow>(
+    "SELECT * FROM social_posts WHERE business_id = ? AND NOT (plan_id IS NOT NULL AND status IN ('scheduled', 'cancelled')) ORDER BY COALESCE(scheduled_at, created_at) DESC LIMIT 50",
+    businessId,
+  );
+  const plans = all<{ id: string; name: string; created_at: string }>('SELECT id, name, created_at FROM post_plans WHERE business_id = ? ORDER BY created_at DESC LIMIT 20', businessId).map((plan) => {
+    const rows = all<PostRow>('SELECT * FROM social_posts WHERE plan_id = ? ORDER BY scheduled_at', plan.id);
+    return {
+      id: plan.id,
+      name: plan.name,
+      createdAt: plan.created_at,
+      posted: rows.filter((r) => r.status === 'done' || r.status === 'partial').length,
+      failed: rows.filter((r) => r.status === 'failed').length,
+      upcoming: rows.filter((r) => r.status === 'scheduled').map(publicPost),
+    };
+  });
   res.json({
     channels: channelsFor(businessId).map((c) => ({ id: c.id, provider: c.provider, name: c.name, available: available(c), lastError: c.last_error })),
     posts: posts.map(publicPost),
+    plans,
     aiAvailable: aiConfigured(),
     business: { name: business.name, phone: business.widget_call_number, color: business.color, website: business.website_url },
   });
@@ -126,7 +144,7 @@ const DRAFT_SCHEMA = {
     big: { type: 'string', description: 'The poster’s big text, at most 14 characters, e.g. "25% OFF" or "$99"' },
     headline: { type: 'string', description: 'What it is, at most 45 characters, e.g. "iPhone back glass replacement"' },
     details: { type: 'string', description: 'One supporting line, at most 70 characters, e.g. "iPhone X to iPhone 15 · while you wait"' },
-    icon: { type: 'string', enum: ['phone', 'screen', 'back', 'battery', 'port', 'water', 'camera', 'tablet', 'tools'], description: 'The picture that best fits the repair: screen (cracked screen), back (back glass), battery, port (charging port), water (water damage), camera, tablet (iPad), tools (general repair), phone (anything else)' },
+    icon: { type: 'string', enum: ['phone', 'screen', 'back', 'battery', 'port', 'water', 'camera', 'tablet', 'console', 'laptop', 'tools'], description: 'The picture that best fits the repair: screen (cracked screen), back (back glass), battery, port (charging port), water (water damage), camera, tablet (iPad), console (PlayStation, Xbox, Switch), laptop (MacBook, laptops), tools (general repair), phone (anything else)' },
     caption: { type: 'string', description: 'The social media post text' },
     isOffer: { type: 'boolean', description: 'True if it is a discount, deal or limited-time offer' },
     offerTitle: { type: 'string', description: 'Offer title for Google, at most 58 characters' },
@@ -203,6 +221,8 @@ postsRouter.post('/', async (req, res) => {
     offer = { title: String(o.title ?? '').trim().slice(0, 58), start: String(o.start ?? ''), end: String(o.end ?? ''), terms: String(o.terms ?? '').trim().slice(0, 1500) || undefined };
     if (!offer.title || !DATE.test(offer.start) || !DATE.test(offer.end) || offer.end < offer.start) return res.status(400).json({ error: 'An offer needs a title and valid start and end dates' });
   }
+  const planId = req.body.planId ? get<{ id: string }>('SELECT id FROM post_plans WHERE id = ? AND business_id = ?', String(req.body.planId), businessId)?.id : null;
+  if (req.body.planId && !planId) return res.status(400).json({ error: 'That auto posts plan no longer exists' });
   let scheduledAt: string | null = null;
   if (req.body.scheduledAt) {
     const t = Date.parse(String(req.body.scheduledAt));
@@ -211,11 +231,90 @@ postsRouter.post('/', async (req, res) => {
   }
   const id = newId();
   run(
-    'INSERT INTO social_posts (id, business_id, caption, media_id, offer, channels, scheduled_at, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    id, businessId, caption, media.id, offer ? JSON.stringify(offer) : null, JSON.stringify(channels), scheduledAt, scheduledAt ? 'scheduled' : 'posting', userId, now(),
+    'INSERT INTO social_posts (id, business_id, caption, media_id, offer, channels, scheduled_at, status, created_by, created_at, plan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    id, businessId, caption, media.id, offer ? JSON.stringify(offer) : null, JSON.stringify(channels), scheduledAt, scheduledAt ? 'scheduled' : 'posting', userId, now(), planId ?? null,
   );
   if (!scheduledAt) await publish(id);
   res.status(201).json({ post: publicPost(get<PostRow>('SELECT * FROM social_posts WHERE id = ?', id)!) });
+});
+
+// ---------- Auto posts ----------
+
+const SLOT_SCHEMA = {
+  type: 'object',
+  properties: {
+    posts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          big: { type: 'string', description: 'Poster big text, at most 14 characters: the offer if there is one (e.g. "10% OFF"), otherwise a short hook (e.g. "CRACKED?", "DEAD BATTERY?")' },
+          headline: { type: 'string', description: 'What it is, at most 45 characters, e.g. "Samsung screen replacement"' },
+          details: { type: 'string', description: 'One supporting line, at most 70 characters, using only facts from the brief or notes' },
+          caption: { type: 'string', description: 'The social media post text' },
+        },
+        required: ['big', 'headline', 'details', 'caption'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['posts'],
+  additionalProperties: false,
+};
+
+/** Writes the words for a batch of auto posts, one per slot, each worded differently. */
+postsRouter.post('/plan/copy', rateLimit('post-plan', 60, 60 * 60 * 1000), async (req, res) => {
+  const business = get<Business>('SELECT * FROM businesses WHERE id = ?', req.session!.businessId)!;
+  if (!aiConfigured()) return res.status(400).json({ error: 'Add ANTHROPIC_API_KEY under Integrations → Server keys first' });
+  const brief = String(req.body.brief ?? '').trim().slice(0, 1000);
+  const slots = (Array.isArray(req.body.slots) ? req.body.slots : []).slice(0, 14).map((s: Record<string, unknown>) => ({
+    topic: String(s.topic ?? '').slice(0, 60),
+    device: String(s.device ?? '').slice(0, 60),
+    offer: String(s.offer ?? '').slice(0, 120),
+  }));
+  if (slots.length === 0 || slots.some((s: { topic: string }) => !s.topic)) return res.status(400).json({ error: 'Nothing to write' });
+  const system = `You write promotional social media posts for ${business.name}, a local repair shop in Australia. Each post goes on Facebook, Instagram and Google Business Profile with a square poster.
+For each slot, write the poster text and the post text for that repair and device.
+Rules:
+- Use only facts from the owner's brief, the slot's offer and the business notes. Never invent prices, discounts, repair times, warranties, stock or guarantees.
+- Only mention an offer on posts whose slot has one, exactly as given.
+- Every post must feel different: vary the hook, the angle (a cracked screen before an important day, a phone that dies by lunchtime, etc.) and the wording. Don't repeat sentences between posts.
+- Post text: 2-4 short lines, friendly, Australian English, then a call to action${business.widget_call_number ? ` (call ${business.widget_call_number})` : ''}${business.website_url ? ` or visit ${business.website_url}` : ''}. End with 3-5 relevant hashtags. At most two emoji. No markdown.
+- Return exactly one post per slot, in the same order.
+${business.ai_notes.trim() ? `\nAbout the business:\n${business.ai_notes.trim()}` : ''}`;
+  const list = slots.map((s: { topic: string; device: string; offer: string }, i: number) => `${i + 1}. ${s.topic}${s.device ? ` for ${s.device}` : ''}${s.offer ? ` — offer: ${s.offer}` : ''}`).join('\n');
+  try {
+    const response = await anthropic().messages.create({
+      model: config('ANTHROPIC_MODEL') || 'claude-opus-5-5',
+      max_tokens: 12000,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: SLOT_SCHEMA } },
+      system,
+      messages: [{ role: 'user', content: `Brief from the owner:\n<brief>\n${brief || '(none)'}\n</brief>\n\nSlots:\n${list}` }],
+    });
+    const text = response.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+    const posts = (JSON.parse(text) as { posts: Record<string, unknown>[] }).posts.slice(0, slots.length);
+    if (posts.length < slots.length) return res.status(502).json({ error: 'The AI wrote too few posts. Try again.' });
+    const str = (v: unknown, max: number) => String(v ?? '').trim().slice(0, max);
+    res.json({ posts: posts.map((p) => ({ big: str(p.big, 30), headline: str(p.headline, 60), details: str(p.details, 90), caption: str(p.caption, 2000) })) });
+  } catch (err) {
+    console.error('Auto posts copy failed:', err);
+    res.status(502).json({ error: 'The AI service had a problem. Try again shortly.' });
+  }
+});
+
+postsRouter.post('/plans', (req, res) => {
+  const name = String(req.body.name ?? '').trim().slice(0, 120) || 'Auto posts';
+  const id = newId();
+  run('INSERT INTO post_plans (id, business_id, name, settings, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)', id, req.session!.businessId, name, JSON.stringify(req.body.settings ?? {}).slice(0, 20000), req.session!.userId, now());
+  res.status(201).json({ id });
+});
+
+/** Cancels every post in the plan that hasn't gone out yet. */
+postsRouter.post('/plans/:id/stop', (req, res) => {
+  const plan = get<{ id: string }>('SELECT id FROM post_plans WHERE id = ? AND business_id = ?', req.params.id, req.session!.businessId);
+  if (!plan) return res.status(404).json({ error: 'Plan not found' });
+  const result = run("UPDATE social_posts SET status = 'cancelled' WHERE plan_id = ? AND status = 'scheduled'", plan.id);
+  res.json({ ok: true, cancelled: Number(result.changes) });
 });
 
 postsRouter.post('/:id/cancel', (req, res) => {

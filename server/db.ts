@@ -375,7 +375,18 @@ db.exec(`
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS social_posts_business ON social_posts(business_id, created_at);
+
+  -- Auto posts: a run of scheduled posts made from one setup (Marketing → Social posts → Auto posts).
+  CREATE TABLE IF NOT EXISTS post_plans (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    settings TEXT NOT NULL,
+    created_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
 `);
+addColumn('social_posts', 'plan_id', 'TEXT REFERENCES post_plans(id) ON DELETE SET NULL');
 
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 

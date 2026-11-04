@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import AutoPosts from './AutoPosts';
 
-interface ChannelInfo {
+export interface ChannelInfo {
   id: string;
   provider: 'google' | 'facebook' | 'instagram';
   name: string;
@@ -9,7 +10,7 @@ interface ChannelInfo {
   lastError: string | null;
 }
 
-interface Post {
+export interface Post {
   id: string;
   caption: string;
   imageUrl: string;
@@ -18,21 +19,32 @@ interface Post {
   status: 'scheduled' | 'posting' | 'done' | 'partial' | 'failed' | 'cancelled';
   createdAt: string;
   results: Record<string, { ok: boolean; url?: string; error?: string; name: string; provider: string }>;
+  planId: string | null;
 }
 
-interface Data {
+export interface Plan {
+  id: string;
+  name: string;
+  createdAt: string;
+  posted: number;
+  failed: number;
+  upcoming: Post[];
+}
+
+export interface Data {
   channels: ChannelInfo[];
   posts: Post[];
+  plans: Plan[];
   aiAvailable: boolean;
   business: { name: string; phone: string | null; color: string; website: string | null };
 }
 
-const input = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none';
-const PROVIDER: Record<ChannelInfo['provider'], string> = { google: 'Google', facebook: 'Facebook', instagram: 'Instagram' };
-const SIZE = 1080;
+export const input = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none';
+export const PROVIDER: Record<ChannelInfo['provider'], string> = { google: 'Google', facebook: 'Facebook', instagram: 'Instagram' };
+export const SIZE = 1080;
 
-type Style = 'bold' | 'burst' | 'split' | 'ribbon' | 'glow' | 'tag' | 'frame' | 'photo';
-const STYLES: { value: Style; label: string }[] = [
+export type Style = 'bold' | 'burst' | 'split' | 'ribbon' | 'glow' | 'tag' | 'frame' | 'photo';
+export const STYLES: { value: Style; label: string }[] = [
   { value: 'bold', label: 'Bold' },
   { value: 'burst', label: 'Starburst' },
   { value: 'split', label: 'Split' },
@@ -43,10 +55,10 @@ const STYLES: { value: Style; label: string }[] = [
   { value: 'photo', label: 'Photo' },
 ];
 /** Colours that work with white text; "Mix it up" picks from these. */
-const MIX_COLOURS = ['#087565', '#1E3352', '#C2410C', '#B91C1C', '#6D28D9', '#0369A1', '#BE185D', '#15803D', '#111827'];
+export const MIX_COLOURS = ['#087565', '#1E3352', '#C2410C', '#B91C1C', '#6D28D9', '#0369A1', '#BE185D', '#15803D', '#111827'];
 
 /** Repair symbols, drawn as lines on a 100×100 grid (the same paths show on the picker buttons). */
-const ICONS = {
+export const ICONS = {
   phone: { label: 'Phone', d: 'M34 8h32a8 8 0 0 1 8 8v68a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z M44 16h12 M47 82h6' },
   screen: { label: 'Screen', d: 'M34 8h32a8 8 0 0 1 8 8v68a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z M40 24l10 16-8 8 12 16-4 12 M50 40l12-4 M42 48l-10 6' },
   back: { label: 'Back glass', d: 'M34 8h32a8 8 0 0 1 8 8v68a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V16a8 8 0 0 1 8-8z M37 16h12a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H37a5 5 0 0 1-5-5V21a5 5 0 0 1 5-5z M39 24a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M39 33a3 3 0 1 0 6 0a3 3 0 1 0-6 0 M58 70l8-8 M58 80l14-14' },
@@ -55,9 +67,11 @@ const ICONS = {
   water: { label: 'Water damage', d: 'M50 10C50 10 22 44 22 62a28 28 0 0 0 56 0C78 44 50 10 50 10z M36 64a14 14 0 0 0 14 14' },
   camera: { label: 'Camera', d: 'M18 30h14l6-10h24l6 10h14a6 6 0 0 1 6 6v40a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6V36a6 6 0 0 1 6-6z M36 56a14 14 0 1 0 28 0a14 14 0 1 0-28 0' },
   tablet: { label: 'Tablet', d: 'M22 10h56a8 8 0 0 1 8 8v64a8 8 0 0 1-8 8H22a8 8 0 0 1-8-8V18a8 8 0 0 1 8-8z M46 82h8' },
+  console: { label: 'Game console', d: 'M30 34h40a18 18 0 0 1 17 24l-5 14a8 8 0 0 1-13 3l-8-9H39l-8 9a8 8 0 0 1-13-3l-5-14a18 18 0 0 1 17-24z M30 46v12 M24 52h12 M64 48h0.1 M72 56h0.1' },
+  laptop: { label: 'Laptop', d: 'M22 22h56a4 4 0 0 1 4 4v38H18V26a4 4 0 0 1 4-4z M8 64h84l-6 10H14z M44 69h12' },
   tools: { label: 'Tools', d: 'M66 10a20 20 0 0 0-19 27L14 70a8 8 0 0 0 12 12l33-33a20 20 0 0 0 27-19l-11 11-11-2-2-11z' },
 } as const;
-type Icon = keyof typeof ICONS | 'none';
+export type Icon = keyof typeof ICONS | 'none';
 
 /** Draws a symbol in a round badge centred on (x, y). */
 function drawIcon(ctx: CanvasRenderingContext2D, icon: Icon, x: number, y: number, r: number, fill: string, ink: string) {
@@ -82,7 +96,7 @@ function drawIcon(ctx: CanvasRenderingContext2D, icon: Icon, x: number, y: numbe
   ctx.restore();
 }
 
-interface Poster {
+export interface Poster {
   icon: Icon;
   style: Style;
   headline: string;
@@ -148,7 +162,7 @@ function headAndDetails(ctx: CanvasRenderingContext2D, p: Poster, y: number, wid
 }
 
 /** Draws the poster at 1080×1080. */
-function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElement | null) {
+export function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElement | null) {
   const ctx = canvas.getContext('2d')!;
   canvas.width = SIZE;
   canvas.height = SIZE;
@@ -360,9 +374,9 @@ function drawPoster(canvas: HTMLCanvasElement, p: Poster, photo: HTMLImageElemen
   ctx.fillText(foot.lines[0], SIZE / 2, SIZE - 60);
 }
 
-const toJpeg = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not make the image'))), 'image/jpeg', 0.92));
+export const toJpeg = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not make the image'))), 'image/jpeg', 0.92));
 
-function loadImage(file: File) {
+export function loadImage(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
@@ -390,6 +404,14 @@ const plusDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOStrin
 export default function Promotions() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState('');
+  const [mode, setMode] = useState<'single' | 'auto'>(() => (sessionStorage.getItem('promo-mode') === 'auto' ? 'auto' : 'single'));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('promo-mode', mode);
+    } catch {
+      /* not saved; fine */
+    }
+  }, [mode]);
   const load = () => api<Data>('/posts').then(setData).catch((err) => setError(err.message));
   useEffect(() => {
     load();
@@ -397,7 +419,14 @@ export default function Promotions() {
   if (!data) return <p className="text-sm text-slate-400">{error || 'Loading…'}</p>;
   return (
     <div className="space-y-5">
-      <Composer data={data} onPosted={load} />
+      <div className="flex rounded-md border border-slate-300 bg-white p-0.5 text-sm sm:w-96">
+        {([['single', 'One post'], ['auto', 'Auto posts (weeks or months)']] as const).map(([v, l]) => (
+          <button key={v} type="button" onClick={() => setMode(v)} className={`flex-1 rounded px-3 py-1.5 ${mode === v ? 'bg-slate-900 font-medium text-white' : 'text-slate-600'}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+      {mode === 'single' ? <Composer data={data} onPosted={load} /> : <AutoPosts data={data} onChanged={load} />}
       {data.posts.length > 0 && (
         <section className="space-y-3">
           <h2 className="font-semibold">Your posts</h2>
@@ -751,7 +780,7 @@ const STATUS: Record<Post['status'], string> = {
   cancelled: 'bg-slate-100 text-slate-600',
 };
 
-function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
+export function PostCard({ post, onChanged }: { post: Post; onChanged: () => void }) {
   const cancel = async () => {
     await api(`/posts/${post.id}/cancel`, { method: 'POST' }).catch(() => {});
     onChanged();
