@@ -46,6 +46,7 @@ const SCHEMA = {
 export function businessKnowledge(business: Business) {
   const faqs = usableFaqs(business.id);
   return [
+    business.address?.trim() && `<address>${business.address.trim()}</address>`,
     business.ai_notes.trim() && `<notes>\n${business.ai_notes.trim()}\n</notes>`,
     faqs.length > 0 && `<faqs>\n${faqs.map((f) => `Q: ${f.question}\nA: ${f.answer}`).join('\n\n')}\n</faqs>`,
   ]

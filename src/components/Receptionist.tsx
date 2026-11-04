@@ -11,6 +11,8 @@ interface Settings {
   pricingMode: 'off' | 'from' | 'exact';
   pricingRules: string;
   priceMaxAgeDays: number;
+  disclosure: string;
+  address: string;
 }
 
 interface Price {
@@ -44,9 +46,9 @@ const MODES: { value: Settings['mode']; label: string; hint: string }[] = [
 ];
 
 const PRICING: { value: Settings['pricingMode']; label: string; hint: string }[] = [
-  { value: 'off', label: 'Never give prices', hint: 'Offers to text a quote instead.' },
-  { value: 'from', label: '“From” prices', hint: 'Says “from $X” using your price list only, as an estimate.' },
-  { value: 'exact', label: 'Exact prices', hint: 'Quotes your price list exactly, only for the models and repairs listed.' },
+  { value: 'off', label: 'Never give prices', hint: 'Says the technician will quote once they see the device.' },
+  { value: 'from', label: '“From” prices', hint: 'Approved list: says “from $X” using only your price list and prices written in your FAQs and AI notes. Never guesses.' },
+  { value: 'exact', label: 'Exact prices', hint: 'Approved list: quotes exact prices from your price list, FAQs and AI notes only, for the models and repairs listed. Never guesses.' },
 ];
 
 function Card({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
@@ -105,7 +107,8 @@ export default function ReceptionistSection() {
     !data.smsNumber && 'Add your Twilio number in Settings → Phone calls & voicemail first.',
     form.mode === 'after_hours' && !data.hoursEnabled && 'Turn on office hours, or the receptionist never answers in this mode.',
     form.mode === 'no_answer' && !data.forwardNumber && 'No mobile to ring first (Phone calls & voicemail), so the receptionist will answer every call.',
-    form.mode !== 'off' && !form.handoffNumber && 'Add a transfer number so callers who ask for a person can be put through.',
+    form.mode !== 'off' && !form.handoffNumber && !data.forwardNumber && 'Add a transfer number so callers who ask for a person can be put through.',
+    form.mode !== 'off' && !form.address.trim() && 'Add the shop address so the receptionist can tell callers where you are.',
   ].filter(Boolean) as string[];
 
   return (
@@ -138,6 +141,16 @@ export default function ReceptionistSection() {
               <input id="rgreet" className={input} value={form.greeting} maxLength={300} onChange={(e) => setForm({ ...form, greeting: e.target.value })} />
               <p className="mt-1 text-xs text-slate-500">{'{business}'} is replaced by your business name. Keep “virtual assistant” in it so callers know.</p>
             </div>
+            <div className="sm:col-span-2">
+              <label className={label} htmlFor="rdisc">AI disclosure, said first on every AI-answered call</label>
+              <input id="rdisc" className={input} maxLength={200} placeholder="Leave empty to turn it off" value={form.disclosure} onChange={(e) => setForm({ ...form, disclosure: e.target.value })} />
+              <p className="mt-1 text-xs text-slate-500">Tells callers up front that an AI may handle the call. Empty turns it off.</p>
+            </div>
+            <div className="sm:col-span-2">
+              <label className={label} htmlFor="raddr">Shop address</label>
+              <input id="raddr" className={input} maxLength={200} placeholder="e.g. 276 Maitland Rd, Mayfield NSW 2304" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
+              <p className="mt-1 text-xs text-slate-500">Given to callers who ask where you are. Opening hours come from Office hours in Settings.</p>
+            </div>
             <div>
               <label className={label} htmlFor="rvoice">Voice</label>
               <select id="rvoice" className={input} value={form.voice} onChange={(e) => setForm({ ...form, voice: e.target.value })}>
@@ -149,8 +162,8 @@ export default function ReceptionistSection() {
               </select>
             </div>
             <div>
-              <label className={label} htmlFor="rhand">Put callers through to (your mobile)</label>
-              <input id="rhand" className={input} placeholder="e.g. 0431 618 100" value={form.handoffNumber ?? ''} onChange={(e) => setForm({ ...form, handoffNumber: e.target.value })} />
+              <label className={label} htmlFor="rhand">Transfer to (your mobile)</label>
+              <input id="rhand" className={input} placeholder={data.forwardNumber ? `Empty: ${data.forwardNumber}, the mobile that rings first` : 'e.g. 0431 618 100'} value={form.handoffNumber ?? ''} onChange={(e) => setForm({ ...form, handoffNumber: e.target.value })} />
             </div>
             <div>
               <label className={label} htmlFor="rurg">Urgent after-hours repairs (optional)</label>

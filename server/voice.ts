@@ -12,7 +12,8 @@ import { phoneConversation } from './phone';
 import { replyChannels, sendToCustomer } from './outbound';
 import { publicUrl, twiml, verifyTwilio } from './twilio';
 import { transcribeVoicemail, transcriptionConfigured } from './transcribe';
-import { receptionistAvailable, relayTwiml } from './receptionist';
+import { receptionistAvailable, relayTwiml, transferNumber } from './receptionist';
+import { tagConversation } from './assistant';
 
 // Twilio Voice webhooks. Point the number's "A call comes in" at /api/voice/incoming and
 // "Call status changes" at /api/voice/status. The other URLs are handed to Twilio in the TwiML below.
@@ -20,6 +21,7 @@ export const voiceRouter = Router();
 voiceRouter.use(express.urlencoded({ extended: false }), verifyTwilio);
 
 const MISSED_TEXT_REPEAT_MS = 60 * 60 * 1000;
+const TRANSFER_RING_SECONDS = 20;
 const VOICEMAIL_GRACE_MS = Number(process.env.VOICEMAIL_GRACE_MS) || 30_000;
 const sendTwiml = (res: Response, xml: string) => res.type('text/xml').send(xml);
 
@@ -120,11 +122,11 @@ voiceRouter.post('/relay-done', (req, res) => {
   if (handoff.action === 'hangup') return sendTwiml(res, twiml`<Hangup/>`);
   const to = normalizePhone(handoff.to);
   // Only ever the numbers set in Settings, never one taken from the conversation.
-  const allowed = [business.receptionist_handoff_number, business.receptionist_urgent_number].filter(Boolean);
+  const allowed = [transferNumber(business), business.receptionist_urgent_number].filter(Boolean);
   if (handoff.action === 'transfer' && to && allowed.includes(to)) {
     return sendTwiml(
       res,
-      twiml`<Dial timeout="25" answerOnBridge="true" callerId="${business.sms_number ?? ''}" action="${publicUrl()}/api/voice/transfer-done"><Number>${to}</Number></Dial>`,
+      twiml`<Dial timeout="${TRANSFER_RING_SECONDS}" answerOnBridge="true" callerId="${business.sms_number ?? ''}" action="${publicUrl()}/api/voice/transfer-done"><Number>${to}</Number></Dial>`,
     );
   }
   if (!handoff.action) console.error(`Receptionist session for ${business.name} ended without a handoff (${params.ErrorCode || 'no error code'}); taking a voicemail`);
@@ -135,8 +137,17 @@ voiceRouter.post('/transfer-done', (req, res) => {
   const params = req.body as Record<string, string>;
   const call = loadCall(params.CallSid);
   const business = call && get<Business>('SELECT * FROM businesses WHERE id = ?', call.business_id);
-  if (!business || params.DialCallStatus === 'completed') return sendTwiml(res, twiml`<Hangup/>`);
-  sendTwiml(res, voicemailTwiml(business, 'Sorry, nobody could take your call just now.'));
+  if (!call || !business || params.DialCallStatus === 'completed') return sendTwiml(res, twiml`<Hangup/>`);
+  // Nobody picked up the transfer: a call-back request (with an alert), then a voicemail for their message.
+  const conversation = get<Conversation>('SELECT * FROM conversations WHERE id = ?', call.conversation_id);
+  if (conversation) {
+    const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id);
+    const body = ['Call back request (AI receptionist)', contact?.phone ? `Call back on: ${contact.phone}` : '', 'Message: They asked to speak to someone, but the transfer wasn’t answered.'].filter(Boolean).join('\n');
+    const message = insertMessage(conversation, 'in', 'sms', body, { kind: 'callback' });
+    onInboundMessage(business, conversation, message, { awayMessage: false });
+    tagConversation(business.id, conversation.id, { name: 'Needs reply', color: '#dc2626' });
+  }
+  sendTwiml(res, voicemailTwiml(business, 'Sorry, nobody could pick up just now. Leave a message and we’ll call you back.'));
 });
 
 voiceRouter.post('/voicemail-done', (_req, res) => {

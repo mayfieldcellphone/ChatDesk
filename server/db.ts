@@ -324,6 +324,10 @@ addColumn('businesses', 'receptionist_notes', "TEXT NOT NULL DEFAULT ''");
 addColumn('businesses', 'pricing_mode', "TEXT NOT NULL DEFAULT 'off'");
 addColumn('businesses', 'pricing_rules', "TEXT NOT NULL DEFAULT 'Prices are estimates and are confirmed after a technician inspects the device. Never quote water damage or motherboard repairs. Never offer discounts.'");
 addColumn('businesses', 'price_max_age_days', 'INTEGER NOT NULL DEFAULT 60');
+// Said before the greeting on every AI-answered call; empty turns it off.
+addColumn('businesses', 'receptionist_disclosure', "TEXT NOT NULL DEFAULT 'Just so you know, this call may be handled by an AI assistant.'");
+// The shop's street address, for callers (and the chat assistant) asking where to find you.
+addColumn('businesses', 'address', "TEXT NOT NULL DEFAULT ''");
 addColumn('calls', 'ai_handled', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('calls', 'ai_outcome', 'TEXT');
 db.exec(`
@@ -425,6 +429,8 @@ export interface Business {
   receptionist_handoff_number: string | null;
   receptionist_urgent_number: string | null;
   receptionist_notes: string;
+  receptionist_disclosure: string;
+  address: string;
   pricing_mode: 'off' | 'from' | 'exact';
   pricing_rules: string;
   price_max_age_days: number;
