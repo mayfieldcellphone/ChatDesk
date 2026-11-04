@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, timeAgo, type Business } from '../api';
+import ShareReview from './ShareReview';
 
 interface Review {
   id: string;
@@ -14,6 +15,7 @@ interface Review {
   aiDraft: string | null;
   autoReplied: boolean;
   replyError: string | null;
+  sharedAt: string | null;
 }
 
 interface LocationInfo {
@@ -206,6 +208,9 @@ function ReviewCard({ review, aiAvailable, onChanged }: { review: Review; aiAvai
   const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [sharing, setSharing] = useState(false);
+  // Good reviews with real words make good posts.
+  const shareable = review.rating >= 4 && (review.comment ?? '').trim().length >= 20;
 
   const suggest = async () => {
     setBusy(true);
@@ -276,8 +281,25 @@ function ReviewCard({ review, aiAvailable, onChanged }: { review: Review; aiAvai
             <Stars n={review.rating} /> · {timeAgo(review.createdAt)}
           </div>
         </div>
-        {!review.seen && <span className="ml-auto rounded-full bg-blue-100 px-2 text-xs text-blue-700">New</span>}
+        <span className="ml-auto flex items-center gap-2">
+          {!review.seen && <span className="rounded-full bg-blue-100 px-2 text-xs text-blue-700">New</span>}
+          {shareable && (
+            <button onClick={() => setSharing(true)} className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-semibold hover:bg-slate-50" title="Post this review as a picture to Facebook and Instagram">
+              {review.sharedAt ? '✓ Shared · share again' : '📣 Share'}
+            </button>
+          )}
+        </span>
       </div>
+      {sharing && (
+        <ShareReview
+          review={review}
+          onClose={() => setSharing(false)}
+          onShared={() => {
+            setSharing(false);
+            onChanged();
+          }}
+        />
+      )}
       <p className="mt-3 whitespace-pre-wrap text-sm text-slate-700">{review.comment || <span className="italic text-slate-400">Rating only, no comment.</span>}</p>
 
       {review.reply && draft === null && (

@@ -283,7 +283,7 @@ export async function syncReviews(connection: Connection) {
       title: hasLowRating
         ? `⚠️ ${first.rating}★ review needs attention · ${business.name}`
         : added.length === 1
-        ? `New ${first.rating}★ review · ${business.name}`
+        ? `New ${first.rating}★ review${first.rating === 5 && (first.comment ?? '').trim().length >= 20 ? ' · tap to share it' : ''} · ${business.name}`
         : `${added.length} new reviews · ${business.name}`,
       body: added.length === 1 ? `${first.author_name}: ${first.comment || '(rating only)'}`.slice(0, 200) : added.map((r) => `${r.rating}★ ${r.author_name}`).join(', '),
       url: `/?business=${business.id}&view=reviews`,

@@ -416,6 +416,8 @@ addColumn('review_requests', 'clicked_at', 'TEXT');
 db.exec('CREATE UNIQUE INDEX IF NOT EXISTS review_requests_token ON review_requests(link_token) WHERE link_token IS NOT NULL');
 // Reviews widget for the business's own website (public/reviews.js): which reviews it shows.
 addColumn('businesses', 'reviews_widget', "TEXT NOT NULL DEFAULT '{}'");
+// When a review was shared as a post (Reviews → 📣 Share).
+addColumn('reviews', 'shared_at', 'TEXT');
 addColumn('social_posts', 'plan_id', 'TEXT REFERENCES post_plans(id) ON DELETE SET NULL');
 
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';

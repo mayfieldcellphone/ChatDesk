@@ -155,6 +155,7 @@ const publicReview = (r: Review & { location: string }) => ({
   aiDraft: r.ai_draft ?? null,
   autoReplied: Boolean(r.auto_replied),
   replyError: r.reply_error ?? null,
+  sharedAt: (r as Review & { shared_at?: string | null }).shared_at ?? null,
 });
 
 reviewsRouter.get('/', (req, res) => {

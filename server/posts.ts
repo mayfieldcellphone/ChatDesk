@@ -234,6 +234,8 @@ postsRouter.post('/', async (req, res) => {
     'INSERT INTO social_posts (id, business_id, caption, media_id, offer, channels, scheduled_at, status, created_by, created_at, plan_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     id, businessId, caption, media.id, offer ? JSON.stringify(offer) : null, JSON.stringify(channels), scheduledAt, scheduledAt ? 'scheduled' : 'posting', userId, now(), planId ?? null,
   );
+  // Posted from Reviews → 📣 Share: mark the review as shared.
+  if (req.body.reviewId) run('UPDATE reviews SET shared_at = ? WHERE id = ? AND business_id = ?', now(), String(req.body.reviewId), businessId);
   if (!scheduledAt) await publish(id);
   res.status(201).json({ post: publicPost(get<PostRow>('SELECT * FROM social_posts WHERE id = ?', id)!) });
 });
