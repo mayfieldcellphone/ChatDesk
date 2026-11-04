@@ -66,8 +66,8 @@ voiceRouter.post('/incoming', (req, res) => {
     const message = insertMessage(conversation, 'in', 'sms', 'Incoming call…', { kind: 'call', quiet: true });
     if (firstContact) run("UPDATE conversations SET status = 'closed' WHERE id = ?", conversation.id);
     run(
-      "INSERT INTO calls (id, business_id, conversation_id, call_sid, status, message_id, created_at) VALUES (?, ?, ?, ?, 'ringing', ?, ?)",
-      newId(), business.id, conversation.id, params.CallSid, message.id, now(),
+      "INSERT INTO calls (id, business_id, conversation_id, call_sid, status, message_id, created_at, forwarded_from) VALUES (?, ?, ?, ?, 'ringing', ?, ?, ?)",
+      newId(), business.id, conversation.id, params.CallSid, message.id, now(), normalizePhone(params.ForwardedFrom) ?? null,
     );
     publish(`biz:${business.id}`, { type: 'message', conversationId: conversation.id, message: { ...message, author_name: null }, quiet: true });
   }

@@ -17,7 +17,8 @@ import { reviewLink } from './google';
 import { proposeFromWebsite, WebsiteError } from './website';
 import { normalizeRepairbillUrl, sendLead } from './repairbill';
 import { leadToken } from './leads';
-import { cancelReviewRequest, recordReviewRequest, reviewRequestText, scheduleReviewRequest } from './reviewRequests';
+import { leadSourceLine } from './leadSource';
+import { cancelReviewRequest, recordReviewRequest, requestLink, reviewRequestText, scheduleReviewRequest } from './reviewRequests';
 import { assistantPausedNow, decide, faqNeedsEditing, parseTable } from './assistant';
 import { pushPublicKey, pushToBusiness } from './push';
 import { createBusiness, setSession } from './auth';
@@ -661,6 +662,7 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       tags: tagsByConversation([conversation.id]).get(conversation.id) ?? [],
       assistantPaused: assistantPausedNow(conversation.id),
       reviewDueAt: (conversation as Conversation & { review_due_at?: string | null }).review_due_at ?? null,
+      source: leadSourceLine(conversation),
     },
     messages: loadMessages(conversation.id),
   });
@@ -694,8 +696,9 @@ inboxRouter.post('/conversations/:id/review-request', async (req, res) => {
   const conversation = loadConversation(businessId, req.params.id);
   if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
   const business = loadBusiness(businessId);
-  const link = reviewLink(business);
-  if (!link) return res.status(400).json({ error: 'Connect your Google Business Profile, or add your review link on the Reviews page.' });
+  const tracked = requestLink(business);
+  if (!tracked) return res.status(400).json({ error: 'Connect your Google Business Profile, or add your review link on the Reviews page.' });
+  const { link, token } = tracked;
 
   const contact = get<Contact>('SELECT * FROM contacts WHERE id = ?', conversation.contact_id)!;
   const channel = CHANNELS.includes(req.body.channel) ? (req.body.channel as Channel) : defaultChannel(business, conversation, contact);
@@ -704,7 +707,7 @@ inboxRouter.post('/conversations/:id/review-request', async (req, res) => {
   const author = get<{ name: string }>('SELECT name FROM users WHERE id = ?', userId);
   try {
     const message = await sendToCustomer(business, conversation, channel, body, { authorId: userId, authorName: author?.name ?? null });
-    recordReviewRequest(businessId, contact.id, conversation.id, false);
+    recordReviewRequest(businessId, contact.id, conversation.id, false, token);
     cancelReviewRequest(conversation.id);
     res.status(201).json({ message });
   } catch (err) {
@@ -814,6 +817,18 @@ inboxRouter.post('/conversations/:id/suggest', rateLimit('ai-suggest', 30, 10 * 
   }
 });
 
+/** "Repair done": closes the conversation and asks for a review after the usual wait (Reviews page). */
+inboxRouter.post('/conversations/:id/repair-done', (req, res) => {
+  const { businessId } = req.session!;
+  const conversation = loadConversation(businessId, req.params.id);
+  if (!conversation) return res.status(404).json({ error: 'Conversation not found' });
+  const result = scheduleReviewRequest(loadBusiness(businessId), conversation, { asked: true });
+  if (result && typeof result === 'object') return res.status(400).json({ error: `Can’t ask for a review: ${result.error}.` });
+  run("UPDATE conversations SET status = 'closed' WHERE id = ?", conversation.id);
+  publish(`biz:${businessId}`, { type: 'status', conversationId: conversation.id, status: 'closed' });
+  res.json({ ok: true, reviewDueAt: result });
+});
+
 inboxRouter.patch('/conversations/:id', (req, res) => {
   const { businessId } = req.session!;
   const conversation = loadConversation(businessId, req.params.id);
@@ -832,7 +847,7 @@ inboxRouter.patch('/conversations/:id', (req, res) => {
   publish(`biz:${businessId}`, { type: 'status', conversationId: conversation.id, status });
   // Closing after helping a customer queues the automatic review request (if it's on); reopening stops it.
   let reviewDueAt: string | null = null;
-  if (status === 'closed' && conversation.status !== 'closed') reviewDueAt = scheduleReviewRequest(loadBusiness(businessId), { ...conversation, status });
+  if (status === 'closed' && conversation.status !== 'closed') reviewDueAt = scheduleReviewRequest(loadBusiness(businessId), { ...conversation, status }) as string | null;
   if (status === 'open') cancelReviewRequest(conversation.id);
   res.json({ ok: true, reviewDueAt });
 });

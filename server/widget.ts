@@ -10,6 +10,7 @@ import { onInboundMessage } from './inbound';
 import { rateLimit } from './rateLimit';
 import { forwardLead, type LeadType } from './repairbill';
 import { widgetReviews } from './reviewRequests';
+import { classifyVisit } from './leadSource';
 
 // Public API used by the embeddable widget (public/widget.js) on customers' websites.
 export const widgetRouter = Router();
@@ -88,6 +89,7 @@ interface Start {
   phone: string;
   email: string | null;
   pageUrl: string | null;
+  visit: unknown;
   body: string;
   kind: 'text' | 'quote' | 'callback';
 }
@@ -101,10 +103,11 @@ function startConversation(business: Business, start: Start) {
     visitor_token: crypto.randomBytes(24).toString('base64url'), page_url: start.pageUrl,
     unread_count: 0, last_message_at: t, created_at: t,
   };
+  const visit = classifyVisit(start.visit);
   run(
-    `INSERT INTO conversations (id, business_id, contact_id, channel, status, visitor_token, page_url, last_message_at, created_at)
-     VALUES (?, ?, ?, 'webchat', 'open', ?, ?, ?, ?)`,
-    conversation.id, business.id, contact.id, conversation.visitor_token, start.pageUrl, t, t,
+    `INSERT INTO conversations (id, business_id, contact_id, channel, status, visitor_token, page_url, last_message_at, created_at, referrer, referrer_detail)
+     VALUES (?, ?, ?, 'webchat', 'open', ?, ?, ?, ?, ?, ?)`,
+    conversation.id, business.id, contact.id, conversation.visitor_token, start.pageUrl, t, t, visit?.label ?? null, visit?.detail || null,
   );
   const message = insertMessage(conversation, 'in', 'webchat', start.body, { kind: start.kind });
   onInboundMessage(business, conversation, message);
@@ -138,7 +141,7 @@ widgetRouter.post('/:key/conversations', startLimit, (req, res) => {
   if (!body) return res.status(400).json({ error: 'Please enter a message' });
   if (tooLong(body)) return res.status(400).json({ error: 'Message is too long' });
 
-  res.status(201).json(startConversation(business, { name, phone, email: null, pageUrl, body, kind: 'text' }));
+  res.status(201).json(startConversation(business, { name, phone, email: null, pageUrl, visit: req.body.visit, body, kind: 'text' }));
 });
 
 /** "Get a quote" and "Request a call back" from the widget menu. They start a conversation like a chat does. */
@@ -172,7 +175,7 @@ widgetRouter.post('/:key/requests', startLimit, (req, res) => {
   }
   if (email) lines.push(`Email: ${email}`);
 
-  res.status(201).json(startConversation(business, { name, phone, email, pageUrl, body: lines.join('\n'), kind: type }));
+  res.status(201).json(startConversation(business, { name, phone, email, pageUrl, visit: req.body.visit, body: lines.join('\n'), kind: type }));
 });
 
 widgetRouter.get('/:key/conversations/:id/messages', (req, res) => {

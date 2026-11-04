@@ -393,6 +393,13 @@ addColumn('businesses', 'review_auto_delay_hours', 'INTEGER NOT NULL DEFAULT 2')
 addColumn('businesses', 'review_auto_repeat_days', 'INTEGER NOT NULL DEFAULT 180');
 // Set when a conversation is closed and a review request is waiting to go out.
 addColumn('conversations', 'review_due_at', 'TEXT');
+// Lead source (leadSource.ts): how a website visitor found the site, e.g. "Google Maps", and the tags behind it.
+addColumn('conversations', 'referrer', 'TEXT');
+addColumn('conversations', 'referrer_detail', 'TEXT');
+// The number a call was forwarded from (Twilio's ForwardedFrom), e.g. the shop landline.
+addColumn('calls', 'forwarded_from', 'TEXT');
+// Off by default: a link on the ChatBird server's address can look unfamiliar to customers until it has its own domain.
+addColumn('businesses', 'review_track_clicks', 'INTEGER NOT NULL DEFAULT 0');
 db.exec(`
   CREATE TABLE IF NOT EXISTS review_requests (
     id TEXT PRIMARY KEY,
@@ -404,6 +411,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS review_requests_contact ON review_requests(contact_id, sent_at);
 `);
+addColumn('review_requests', 'link_token', 'TEXT');
+addColumn('review_requests', 'clicked_at', 'TEXT');
+db.exec('CREATE UNIQUE INDEX IF NOT EXISTS review_requests_token ON review_requests(link_token) WHERE link_token IS NOT NULL');
 // Reviews widget for the business's own website (public/reviews.js): which reviews it shows.
 addColumn('businesses', 'reviews_widget', "TEXT NOT NULL DEFAULT '{}'");
 addColumn('social_posts', 'plan_id', 'TEXT REFERENCES post_plans(id) ON DELETE SET NULL');
@@ -464,6 +474,7 @@ export interface Business {
   review_auto_mode: 'off' | 'on_close';
   review_auto_delay_hours: number;
   review_auto_repeat_days: number;
+  review_track_clicks: number;
   reviews_widget: string;
   address: string;
   pricing_mode: 'off' | 'from' | 'exact';

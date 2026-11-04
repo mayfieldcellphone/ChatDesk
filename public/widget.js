@@ -19,6 +19,20 @@
 
   var state = { config: null, session: null, messages: [], open: false, stream: null, view: null };
 
+  // How the visitor reached the site, kept from the first page of their visit, so ChatBird can show
+  // where each lead came from (Google Maps, Facebook, an ad…).
+  var visit = null;
+  try { visit = JSON.parse(sessionStorage.getItem('chatbird-visit') || 'null'); } catch (e) { /* storage blocked */ }
+  if (!visit) {
+    var q = new URLSearchParams(location.search);
+    visit = {
+      ref: document.referrer || '', landing: location.href,
+      utm_source: q.get('utm_source') || '', utm_medium: q.get('utm_medium') || '', utm_campaign: q.get('utm_campaign') || '',
+      gclid: q.has('gclid') || q.has('gbraid') || q.has('wbraid'), fbclid: q.has('fbclid'),
+    };
+    try { sessionStorage.setItem('chatbird-visit', JSON.stringify(visit)); } catch (e) { /* this page only */ }
+  }
+
   function loadSession() {
     try { return JSON.parse(localStorage.getItem(storeKey) || 'null'); } catch (e) { return null; }
   }
@@ -347,7 +361,7 @@
       e.preventDefault();
       btn.disabled = true;
       error.style.display = 'none';
-      var payload = { pageUrl: location.href };
+      var payload = { pageUrl: location.href, visit: visit };
       if (kind !== 'chat') payload.type = kind;
       // form.name is the form's own name attribute, so read fields by their elements.
       spec.fields.forEach(function (f) { payload[f[1]] = form.querySelector('[name="' + f[1] + '"]').value; });

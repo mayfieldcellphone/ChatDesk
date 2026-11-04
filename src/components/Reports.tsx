@@ -26,6 +26,9 @@ interface Report {
   assistant: { answered: number; handedOver: number; since: string | null; questions: { body: string; at: string; conversationId: string; businessId: string; businessName: string }[] };
   heatmap: number[][];
   pages: { page: string; count: number }[];
+  referrers: { label: string; count: number }[];
+  calls: { viaLandline: number; direct: number };
+  reviews: { count: number; average: number | null; byStar: number[]; replied: number; medianReplyHours: number | null; requests: number; tracked: number; clicked: number };
   weeklyReport: boolean;
   emailAvailable: boolean;
 }
@@ -181,6 +184,9 @@ export default function Reports({ business, businessCount, onOpenConversation }:
               ))}
             </div>
           )}
+          <button onClick={() => downloadCsv(data, business.name)} className={`${businessCount > 1 ? '' : 'md:ml-auto '}rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm shadow-sm hover:bg-slate-50`}>
+            ⬇ Export CSV
+          </button>
         </div>
         {error && <p className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">{error}</p>}
 
@@ -294,6 +300,67 @@ export default function Reports({ business, businessCount, onOpenConversation }:
             </table>
           )}
         </Card>
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <Card title="How website visitors found you" hint="Website chats and forms, by how the visitor reached your site (search, Google Maps, Facebook, an ad, or typed in).">
+            {data.referrers.length === 0 ? (
+              <p className="text-sm text-slate-400">No website enquiries with this information yet. It’s recorded from now on.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-slate-100">
+                  {data.referrers.map((x) => (
+                    <tr key={x.label}>
+                      <td className="max-w-0 truncate py-1.5 pr-3">{x.label}</td>
+                      <td className="w-12 py-1.5 text-right tabular-nums">{x.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {data.calls.viaLandline + data.calls.direct > 0 && (
+              <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600">
+                Calls: <b>{data.calls.viaLandline}</b> through the shop landline, <b>{data.calls.direct}</b> straight to your ChatBird number (where the phone company passes this on).
+              </p>
+            )}
+          </Card>
+
+          <Card title="Google reviews" hint="Reviews left in this period, your replies, and review requests you sent.">
+            {data.reviews.count === 0 && data.reviews.requests === 0 ? (
+              <p className="text-sm text-slate-400">No new reviews or review requests in this period.</p>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="flex items-baseline gap-3">
+                  <span className="text-3xl font-bold tabular-nums">{data.reviews.average?.toFixed(1) ?? '–'}</span>
+                  <span className="text-slate-600">
+                    ★ average from <b>{data.reviews.count}</b> new review{data.reviews.count === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <ul className="space-y-1">
+                  {[5, 4, 3, 2, 1].map((star) => {
+                    const n = data.reviews.byStar[star - 1];
+                    return (
+                      <li key={star} className="flex items-center gap-2">
+                        <span className="w-6 text-slate-500">{star}★</span>
+                        <span className="h-2 flex-1 overflow-hidden rounded bg-slate-100">
+                          <span className={`block h-full ${star >= 4 ? 'bg-emerald-500' : star === 3 ? 'bg-amber-400' : 'bg-red-500'}`} style={{ width: `${data.reviews.count ? (n / data.reviews.count) * 100 : 0}%` }} />
+                        </span>
+                        <span className="w-6 text-right tabular-nums">{n}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <p className="text-slate-600">
+                  Replied to <b>{data.reviews.replied}</b> of {data.reviews.count}
+                  {data.reviews.medianReplyHours !== null && <> · usually within <b>{data.reviews.medianReplyHours < 1 ? `${Math.round(data.reviews.medianReplyHours * 60)} min` : `${data.reviews.medianReplyHours} hr`}</b></>}
+                </p>
+                <p className="text-slate-600">
+                  Review requests sent: <b>{data.reviews.requests}</b>
+                  {data.reviews.tracked > 0 && <> · {data.reviews.clicked} of {data.reviews.tracked} tracked links opened</>}
+                </p>
+              </div>
+            )}
+          </Card>
+        </div>
 
         <WeeklyEmail initial={data.weeklyReport} emailAvailable={data.emailAvailable} businessName={business.name} />
       </div>
@@ -497,4 +564,56 @@ function WeeklyEmail({ initial, emailAvailable, businessName }: { initial: boole
       </div>
     </Card>
   );
+}
+
+/** The whole report as a CSV file that opens in Excel (with a BOM so Excel reads the characters right). */
+function downloadCsv(data: Report, businessName: string) {
+  const rows: (string | number | null)[][] = [];
+  const add = (...r: (string | number | null)[]) => rows.push(r);
+  add(`ChatBird report: ${businessName}`, `${data.range.from} to ${data.range.to}`);
+  add();
+  add('Totals', 'This period', 'Previous period');
+  for (const [key, label] of [['conversations', 'New conversations'], ['customerMessages', 'Customer messages'], ['calls', 'Calls'], ['missedCalls', 'Missed calls'], ['voicemails', 'Voicemails'], ['bookings', 'Bookings'], ['quotes', 'Quote requests'], ['callbacks', 'Call-back requests'], ['forms', 'Other website forms']] as const) {
+    add(label, data.totals[key], data.previousTotals[key]);
+  }
+  add();
+  add('Where they came from', 'Conversations');
+  for (const [key, label] of SOURCES) add(label, data.bySource[key] ?? 0);
+  add();
+  add('How website visitors found you', 'Enquiries');
+  for (const x of data.referrers) add(x.label, x.count);
+  add('Calls through the shop landline', data.calls.viaLandline);
+  add('Calls straight to the ChatBird number', data.calls.direct);
+  add();
+  add('Top pages for enquiries', 'Enquiries');
+  for (const x of data.pages) add(x.page, x.count);
+  add();
+  add('Google reviews', '');
+  add('New reviews', data.reviews.count);
+  add('Average rating', data.reviews.average);
+  for (const star of [5, 4, 3, 2, 1]) add(`${star} stars`, data.reviews.byStar[star - 1]);
+  add('Replied to', data.reviews.replied);
+  add('Median reply time (hours)', data.reviews.medianReplyHours);
+  add('Review requests sent', data.reviews.requests);
+  add('Tracked links opened', data.reviews.tracked ? `${data.reviews.clicked} of ${data.reviews.tracked}` : '');
+  add();
+  add('Response time', '');
+  add('Median first answer (seconds)', data.response.medianFirstAnswer);
+  add('Median staff reply (seconds)', data.response.medianStaffReply);
+  add('Answered within 5 minutes', data.response.within5min);
+  add('Waited over 1 hour', data.response.over1h);
+  add('No reply', data.response.noReply);
+  add();
+  add('Day', 'New conversations');
+  for (const d of data.daily) add(d.date, d.count);
+  const cell = (v: string | number | null | undefined) => {
+    const s = v === null || v === undefined ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const csv = '\ufeff' + rows.map((r) => r.map(cell).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = `chatbird-report-${data.range.from}-to-${data.range.to}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }

@@ -14,7 +14,7 @@ import { reportsRouter, startWeeklyReports } from './reports';
 import { marketingRouter, startCampaigns, unsubscribeRouter } from './campaigns';
 import { attachReceptionist, receptionistRouter } from './receptionist';
 import { mediaRouter, postsRouter, startScheduledPosts } from './posts';
-import { reviewRequestsRouter, startReviewRequests } from './reviewRequests';
+import { reviewLinkRouter, reviewRequestsRouter, startReviewRequests } from './reviewRequests';
 import { backupRouter, startBackups } from './backup';
 import { all, db, type Connection } from './db';
 
@@ -86,6 +86,7 @@ app.use('/api/marketing', marketingRouter);
 app.use('/api/receptionist', receptionistRouter);
 app.use('/api/posts', postsRouter);
 app.use('/api/review-tools', reviewRequestsRouter);
+app.use('/r', reviewLinkRouter);
 app.use('/api/backups', backupRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));

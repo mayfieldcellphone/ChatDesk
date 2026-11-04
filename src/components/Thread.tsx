@@ -231,6 +231,18 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
     onChanged();
   };
 
+  /** Closes the conversation and queues the review request (Reviews page sets the wait). */
+  const repairDone = async () => {
+    setError('');
+    try {
+      const r = await api<{ reviewDueAt: string | null }>(`/conversations/${conversationId}/repair-done`, { method: 'POST' });
+      setConversation((c) => (c ? { ...c, status: 'closed', reviewDueAt: r.reviewDueAt } : c));
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const cancelReview = async () => {
     await api(`/conversations/${conversationId}`, { method: 'PATCH', body: { cancelReviewRequest: true } });
     setConversation((c) => (c ? { ...c, reviewDueAt: null } : c));
@@ -292,6 +304,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
               </>
             )}
           </div>
+          {conversation.source && <div className="truncate text-xs text-slate-500" title="Where this lead came from">📍 {conversation.source}</div>}
           {/* Internal tags: only the team sees these. */}
           <div className="mt-1.5 flex flex-wrap items-center gap-1">
             {conversation.tags.map((t) => (
@@ -321,6 +334,15 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
             }
           >
             🤖 {conversation.assistantPaused ? 'Assistant paused' : 'Assistant on'}
+          </button>
+        )}
+        {conversation.status === 'open' && (
+          <button
+            onClick={repairDone}
+            title="Close this conversation and text the customer your review request (after the wait set on the Reviews page)"
+            className="shrink-0 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-800 hover:bg-emerald-100"
+          >
+            ✅ Repair done
           </button>
         )}
         <button

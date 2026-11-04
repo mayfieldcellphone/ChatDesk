@@ -130,6 +130,8 @@ export interface ConversationDetail {
   assistantPaused: boolean;
   /** When the automatic review request goes out, if one is waiting. */
   reviewDueAt: string | null;
+  /** Where the lead came from, e.g. "Website chat · Google Maps · /screen-repair". */
+  source: string;
   /** …because staff replied: it answers again 30 minutes after their last message. */
 }
 

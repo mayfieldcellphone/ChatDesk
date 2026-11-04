@@ -138,6 +138,9 @@ export function buildReport(businesses: Business[], from: string, to: string) {
   let answered = 0, handedOver = 0;
   let assistantSince: string | null = null;
   const questions: { body: string; at: string; conversationId: string; businessId: string; businessName: string }[] = [];
+  const referrers = new Map<string, number>();
+  let landlineCalls = 0, directCalls = 0;
+  const reviews = { count: 0, ratingSum: 0, byStar: [0, 0, 0, 0, 0], replied: 0, replyHours: [] as number[], requests: 0, tracked: 0, clicked: 0 };
 
   for (const business of businesses) {
     const tz = business.timezone;
@@ -196,6 +199,38 @@ export function buildReport(businesses: Business[], from: string, to: string) {
       if (p.weekday >= 0) heatmap[p.weekday][p.hour]++;
     }
 
+    for (const r of all<{ referrer: string; n: number }>(
+      "SELECT referrer, COUNT(*) AS n FROM conversations WHERE business_id = ? AND channel = 'webchat' AND referrer IS NOT NULL AND created_at >= ? AND created_at < ? GROUP BY referrer",
+      business.id, start, end,
+    )) referrers.set(r.referrer, (referrers.get(r.referrer) ?? 0) + r.n);
+    const viaLandline = get<{ landline: number; direct: number }>(
+      'SELECT COALESCE(SUM(forwarded_from IS NOT NULL), 0) AS landline, COALESCE(SUM(forwarded_from IS NULL), 0) AS direct FROM calls WHERE business_id = ? AND created_at >= ? AND created_at < ?',
+      business.id, start, end,
+    )!;
+    landlineCalls += viaLandline.landline;
+    directCalls += viaLandline.direct;
+
+    // Google reviews left in the period, how many got a reply and how fast.
+    for (const r of all<{ rating: number; reply: string | null; review_created_at: string; reply_updated_at: string | null }>(
+      'SELECT rating, reply, review_created_at, reply_updated_at FROM reviews WHERE business_id = ? AND review_created_at >= ? AND review_created_at < ?',
+      business.id, start, end,
+    )) {
+      reviews.count++;
+      reviews.ratingSum += r.rating;
+      if (r.rating >= 1 && r.rating <= 5) reviews.byStar[r.rating - 1]++;
+      if (r.reply) {
+        reviews.replied++;
+        if (r.reply_updated_at) reviews.replyHours.push((Date.parse(r.reply_updated_at) - Date.parse(r.review_created_at)) / 3600_000);
+      }
+    }
+    const asked = get<{ n: number; tracked: number; clicked: number }>(
+      'SELECT COUNT(*) AS n, COUNT(link_token) AS tracked, COUNT(clicked_at) AS clicked FROM review_requests WHERE business_id = ? AND sent_at >= ? AND sent_at < ?',
+      business.id, start, end,
+    )!;
+    reviews.requests += asked.n;
+    reviews.tracked += asked.tracked;
+    reviews.clicked += asked.clicked;
+
     const log = get<{ answered: number; handed: number }>(
       `SELECT COALESCE(SUM(action = 'answer'), 0) AS answered, COALESCE(SUM(action = 'handoff'), 0) AS handed
        FROM assistant_log WHERE business_id = ? AND created_at >= ? AND created_at < ?`,
@@ -234,6 +269,19 @@ export function buildReport(businesses: Business[], from: string, to: string) {
     assistant: { answered, handedOver, since: assistantSince, questions: questions.slice(0, 50) },
     heatmap,
     pages: [...pages].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([page, count]) => ({ page, count })),
+    referrers: [...referrers].sort((a, b) => b[1] - a[1]).map(([label, count]) => ({ label, count })),
+    calls: { viaLandline: landlineCalls, direct: directCalls },
+    reviews: {
+      count: reviews.count,
+      average: reviews.count ? Math.round((reviews.ratingSum / reviews.count) * 10) / 10 : null,
+      byStar: reviews.byStar,
+      replied: reviews.replied,
+      // In hours, to one decimal place.
+      medianReplyHours: reviews.replyHours.length ? median(reviews.replyHours.map((h) => h * 10))! / 10 : null,
+      requests: reviews.requests,
+      tracked: reviews.tracked,
+      clicked: reviews.clicked,
+    },
   };
 }
 

@@ -406,8 +406,9 @@ const fieldInput = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm 
 
 /** Sends the review request on its own a while after a conversation is closed. */
 function AutoReviewRequests() {
-  const [data, setData] = useState<{ settings: { mode: 'off' | 'on_close'; delayHours: number; repeatDays: number }; sentLast30Days: number; automaticLast30Days: number; waiting: number } | null>(null);
-  const [form, setForm] = useState<{ mode: 'off' | 'on_close'; delayHours: number; repeatDays: number } | null>(null);
+  type AutoSettings = { mode: 'off' | 'on_close'; delayHours: number; repeatDays: number; trackClicks: boolean };
+  const [data, setData] = useState<{ settings: AutoSettings; sentLast30Days: number; automaticLast30Days: number; trackedLast30Days: number; clickedLast30Days: number; waiting: number } | null>(null);
+  const [form, setForm] = useState<AutoSettings | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const load = () =>
     api<NonNullable<typeof data>>('/review-tools')
@@ -438,15 +439,15 @@ function AutoReviewRequests() {
       <div>
         <h2 className="font-semibold">Ask for reviews automatically</h2>
         <p className="mt-1 text-sm text-slate-500">
-          When you close a conversation after helping a customer, ChatBird sends the message above by text (or email if there’s no mobile). You can stop it from the conversation
-          before it goes.
+          Press <b>✅ Repair done</b> in a conversation and ChatBird texts the message above after the wait below (or emails it if there’s no mobile). You can also have it go out
+          whenever you close a conversation. Either way you can stop it from the conversation before it goes.
         </p>
       </div>
       <label className="flex items-center gap-2 text-sm font-medium">
         <input type="checkbox" checked={form.mode === 'on_close'} onChange={(e) => setForm({ ...form, mode: e.target.checked ? 'on_close' : 'off' })} />
-        Ask for a review when I close a conversation
+        Also ask whenever I close a conversation (not only with ✅ Repair done)
       </label>
-      {form.mode === 'on_close' && (
+      {(
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm">
             <span className="mb-1 block font-medium text-slate-700">Send it</span>
@@ -468,8 +469,19 @@ function AutoReviewRequests() {
               ))}
             </select>
           </label>
+          <label className="flex items-start gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" className="mt-0.5" checked={form.trackClicks} onChange={(e) => setForm({ ...form, trackClicks: e.target.checked })} />
+            <span>
+              <span className="font-medium">Track who opens the link</span>{' '}
+              <span className="text-slate-500">
+                · Uses a short ChatBird link that opens your review page, so you can see how many tap it. Best once ChatBird has its own web address; today’s address looks
+                unfamiliar in a text.
+              </span>
+            </span>
+          </label>
           <p className="text-xs text-slate-500 sm:col-span-2">
-            Only sent between 9am and 8pm, only where you replied to the customer yourself (not just an answered call), and never to anyone who unsubscribed.
+            Only sent between 9am and 8pm, never twice to the same customer within the time above, and never to anyone who unsubscribed. Closing a conversation only asks where you
+            replied to the customer yourself (not just an answered call).
           </p>
         </div>
       )}
@@ -477,7 +489,9 @@ function AutoReviewRequests() {
         <button className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Save</button>
         {status && <span className={`text-sm ${status.ok ? 'text-green-600' : 'text-red-600'}`}>{status.text}</span>}
         <span className="ml-auto text-xs text-slate-500">
-          Last 30 days: {data.sentLast30Days} sent ({data.automaticLast30Days} automatic){data.waiting ? ` · ${data.waiting} waiting to go out` : ''}
+          Last 30 days: {data.sentLast30Days} sent ({data.automaticLast30Days} automatic)
+          {data.trackedLast30Days ? ` · ${data.clickedLast30Days} of ${data.trackedLast30Days} tracked links opened` : ''}
+          {data.waiting ? ` · ${data.waiting} waiting to go out` : ''}
         </span>
       </div>
     </form>
