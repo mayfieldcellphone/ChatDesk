@@ -8,7 +8,8 @@ Last updated: 8 Nov 2026
 
 ## Where things stand
 
-- **ChatBird v1.0** runs Mayfield Phone Repair (Birdeye cancelled). Version tag: `v1.0` on `main`.
+- **ChatBird v1.0** runs Mayfield Phone Repair (Birdeye cancelled). v1.0 = commit `2d023d1` on `main`.
+- **Branches:** `main` is the tested version Mayfield runs. New work happens on other branches and only reaches `main` when the owner says “merge”.
 - **Live server:** Hostinger VPS, folder `/opt/chatdesk`, address https://chatdesk.31-97-66-240.sslip.io
 - **Mayfield stays on v1.0** while ChatBird is made into a product. Only update it after a new
   version has been tested on staging.
