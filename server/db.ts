@@ -443,6 +443,25 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS listing_profiles_business ON listing_profiles(business_id);
 `);
+db.exec(`
+  -- In-store review QR codes (reviewQr.ts): each code opens a Google "write a review" page and counts scans.
+  CREATE TABLE IF NOT EXISTS review_qr_codes (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    code TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    connection_id TEXT REFERENCES connections(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS review_qr_scans (
+    id TEXT PRIMARY KEY,
+    qr_id TEXT NOT NULL REFERENCES review_qr_codes(id) ON DELETE CASCADE,
+    scanned_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS review_qr_scans_qr ON review_qr_scans(qr_id, scanned_at);
+`);
+// Set when a review arrived soon after someone scanned that location's QR code.
+addColumn('reviews', 'via_qr', 'TEXT');
 // Photos in conversations (media.ts). Customers' photos are private: only the team can see them.
 addColumn('messages', 'media_id', 'TEXT');
 addColumn('media', 'private', 'INTEGER NOT NULL DEFAULT 0');

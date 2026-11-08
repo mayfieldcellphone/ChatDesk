@@ -140,7 +140,7 @@ export function buildReport(businesses: Business[], from: string, to: string) {
   const questions: { body: string; at: string; conversationId: string; businessId: string; businessName: string }[] = [];
   const referrers = new Map<string, number>();
   let landlineCalls = 0, directCalls = 0;
-  const reviews = { count: 0, ratingSum: 0, byStar: [0, 0, 0, 0, 0], replied: 0, replyHours: [] as number[], requests: 0, tracked: 0, clicked: 0 };
+  const reviews = { count: 0, ratingSum: 0, byStar: [0, 0, 0, 0, 0], replied: 0, replyHours: [] as number[], requests: 0, tracked: 0, clicked: 0, qrScans: 0, viaQr: 0 };
 
   for (const business of businesses) {
     const tz = business.timezone;
@@ -228,6 +228,11 @@ export function buildReport(businesses: Business[], from: string, to: string) {
       business.id, start, end,
     )!;
     reviews.requests += asked.n;
+    reviews.qrScans += get<{ n: number }>(
+      'SELECT COUNT(*) AS n FROM review_qr_scans s JOIN review_qr_codes q ON q.id = s.qr_id WHERE q.business_id = ? AND s.scanned_at >= ? AND s.scanned_at < ?',
+      business.id, start, end,
+    )!.n;
+    reviews.viaQr += get<{ n: number }>('SELECT COUNT(*) AS n FROM reviews WHERE business_id = ? AND via_qr IS NOT NULL AND review_created_at >= ? AND review_created_at < ?', business.id, start, end)!.n;
     reviews.tracked += asked.tracked;
     reviews.clicked += asked.clicked;
 
@@ -281,6 +286,8 @@ export function buildReport(businesses: Business[], from: string, to: string) {
       requests: reviews.requests,
       tracked: reviews.tracked,
       clicked: reviews.clicked,
+      qrScans: reviews.qrScans,
+      viaQr: reviews.viaQr,
     },
   };
 }

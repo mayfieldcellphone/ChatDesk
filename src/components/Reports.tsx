@@ -28,7 +28,7 @@ interface Report {
   pages: { page: string; count: number }[];
   referrers: { label: string; count: number }[];
   calls: { viaLandline: number; direct: number };
-  reviews: { count: number; average: number | null; byStar: number[]; replied: number; medianReplyHours: number | null; requests: number; tracked: number; clicked: number };
+  reviews: { count: number; average: number | null; byStar: number[]; replied: number; medianReplyHours: number | null; requests: number; tracked: number; clicked: number; qrScans: number; viaQr: number };
   weeklyReport: boolean;
   emailAvailable: boolean;
 }
@@ -325,7 +325,7 @@ export default function Reports({ business, businessCount, onOpenConversation }:
           </Card>
 
           <Card title="Google reviews" hint="Reviews left in this period, your replies, and review requests you sent.">
-            {data.reviews.count === 0 && data.reviews.requests === 0 ? (
+            {data.reviews.count === 0 && data.reviews.requests === 0 && data.reviews.qrScans === 0 ? (
               <p className="text-sm text-slate-400">No new reviews or review requests in this period.</p>
             ) : (
               <div className="space-y-3 text-sm">
@@ -357,6 +357,11 @@ export default function Reports({ business, businessCount, onOpenConversation }:
                   Review requests sent: <b>{data.reviews.requests}</b>
                   {data.reviews.tracked > 0 && <> · {data.reviews.clicked} of {data.reviews.tracked} tracked links opened</>}
                 </p>
+                {data.reviews.qrScans > 0 && (
+                  <p className="text-slate-600">
+                    In-store QR code: <b>{data.reviews.qrScans}</b> scan{data.reviews.qrScans === 1 ? '' : 's'} · <b>{data.reviews.viaQr}</b> review{data.reviews.viaQr === 1 ? '' : 's'} soon after
+                  </p>
+                )}
               </div>
             )}
           </Card>
@@ -596,6 +601,8 @@ function downloadCsv(data: Report, businessName: string) {
   add('Median reply time (hours)', data.reviews.medianReplyHours);
   add('Review requests sent', data.reviews.requests);
   add('Tracked links opened', data.reviews.tracked ? `${data.reviews.clicked} of ${data.reviews.tracked}` : '');
+  add('In-store QR scans', data.reviews.qrScans);
+  add('Reviews soon after a QR scan', data.reviews.viaQr);
   add();
   add('Response time', '');
   add('Median first answer (seconds)', data.response.medianFirstAnswer);

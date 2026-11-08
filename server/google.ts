@@ -7,6 +7,7 @@ import { pushToBusiness } from './push';
 import { config } from './config';
 import { publicUrl } from './twilio';
 import { DAYS, validateSpecialDays, type Day, type SpecialDay, type WeeklyHours } from './hours';
+import { markQrReviews } from './reviewQr';
 
 // Google Business Profile: connect locations, sync reviews, reply to them.
 // Setup (Google Cloud project + Business Profile API access): docs/INTEGRATIONS.md.
@@ -275,6 +276,7 @@ export async function syncReviews(connection: Connection) {
   }
 
   if (added.length > 0) {
+    markQrReviews(connection.id, added);
     publish(`biz:${business.id}`, { type: 'review', count: added.length });
     emailReviewAlert(business, added).catch((err) => console.error('Review email failed:', err));
     handleNewReviews(business, added).catch((err) => console.error('Review replies failed:', err));
@@ -306,6 +308,14 @@ export async function replyToReview(review: Review, comment: string | null) {
     const saved = await googleFetch<{ comment: string; updateTime?: string }>(token, url, { method: 'PUT', body: { comment } });
     run('UPDATE reviews SET reply = ?, reply_updated_at = ? WHERE id = ?', saved.comment ?? comment, saved.updateTime ?? now(), review.id);
   }
+}
+
+/** One location's "write a review" page on Google. */
+export function locationReviewLink(connection: Connection) {
+  const meta = JSON.parse(connection.meta) as { placeId?: string; newReviewUri?: string };
+  if (meta.newReviewUri) return meta.newReviewUri;
+  if (meta.placeId) return `https://search.google.com/local/writereview?placeid=${encodeURIComponent(meta.placeId)}`;
+  return null;
 }
 
 /** The link customers use to write a review: the owner's own link, or the one Google gives the location. */

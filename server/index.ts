@@ -18,6 +18,7 @@ import { reviewLinkRouter, reviewRequestsRouter, startReviewRequests } from './r
 import { backupRouter, startBackups } from './backup';
 import { conversationMediaRouter } from './media';
 import { listingsRouter } from './listings';
+import { qrRedirectRouter, reviewQrRouter } from './reviewQr';
 import { all, db, type Connection } from './db';
 
 const app = express();
@@ -92,6 +93,8 @@ app.use('/r', reviewLinkRouter);
 app.use('/api/backups', backupRouter);
 app.use('/api/media', conversationMediaRouter);
 app.use('/api/listings', listingsRouter);
+app.use('/api/review-qr', reviewQrRouter);
+app.use('/q', qrRedirectRouter);
 app.use('/api', inboxRouter);
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
 

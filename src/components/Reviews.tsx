@@ -16,6 +16,8 @@ interface Review {
   autoReplied: boolean;
   replyError: string | null;
   sharedAt: string | null;
+  /** The QR code (by name) scanned shortly before this review arrived. */
+  viaQr: string | null;
 }
 
 interface LocationInfo {
@@ -197,6 +199,7 @@ export default function Reviews({ business, onSaved, onOpenIntegrations }: Props
         )}
 
         <ReviewRequestSettings business={business} effectiveLink={data.reviewLink} onSaved={onSaved} />
+        <ReviewQrCodes />
         <AutoReviewRequests />
         <ReviewsWidgetSettings />
       </div>
@@ -279,6 +282,7 @@ function ReviewCard({ review, aiAvailable, onChanged }: { review: Review; aiAvai
           </div>
           <div className="text-xs text-slate-500 mt-0.5">
             <Stars n={review.rating} /> · {timeAgo(review.createdAt)}
+            {review.viaQr && <span className="ml-1 rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700">📱 via QR code ({review.viaQr})</span>}
           </div>
         </div>
         <span className="ml-auto flex items-center gap-2">
@@ -611,6 +615,124 @@ function ReviewsWidgetSettings() {
           <span className="text-xs text-slate-500">To put it in a set spot, add <code>{'<div id="chatbird-reviews"></div>'}</code> there.</span>
         </div>
       </div>
+    </section>
+  );
+}
+
+interface QrCode {
+  id: string;
+  label: string;
+  connectionId: string | null;
+  url: string;
+  scans: number;
+  scansThisMonth: number;
+  lastScan: string | null;
+  reviews: number;
+  working: boolean;
+}
+
+/** Printable QR codes for the shop: each opens the Google review page and counts scans. */
+function ReviewQrCodes() {
+  const [data, setData] = useState<{ codes: QrCode[]; locations: { id: string; name: string }[] } | null>(null);
+  const [label, setLabel] = useState('Counter');
+  const [locationId, setLocationId] = useState('');
+  const [error, setError] = useState('');
+  const load = () =>
+    api<NonNullable<typeof data>>('/review-qr')
+      .then((d) => {
+        setData(d);
+        setLocationId((l) => l || d.locations[0]?.id || '');
+      })
+      .catch((err) => setError((err as Error).message));
+  useEffect(() => {
+    load();
+  }, []);
+  if (!data) return error ? <p className="text-sm text-red-600">{error}</p> : null;
+
+  const create = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await api('/review-qr', { method: 'POST', body: { label, connectionId: locationId || null } });
+      setLabel('');
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+  const remove = async (c: QrCode) => {
+    if (!confirm(`Delete the “${c.label}” code? Printed copies stop working.`)) return;
+    await api(`/review-qr/${c.id}`, { method: 'DELETE' });
+    load();
+  };
+  const where = (id: string | null) => data.locations.find((l) => l.id === id)?.name;
+
+  return (
+    <section className="space-y-4 rounded-xl bg-white p-6 shadow-sm">
+      <div>
+        <h2 className="font-semibold">QR codes for your shop</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Print one for the counter, receipts or the window. A scan opens your Google review page straight away; ChatBird counts the scans, and reviews that come in
+          soon after show “📱 via QR code”. Make a separate code for each spot to see which works best.
+        </p>
+      </div>
+      {data.codes.length > 0 && (
+        <ul className="space-y-3">
+          {data.codes.map((c) => (
+            <li key={c.id} className="flex flex-wrap items-center gap-4 rounded-lg border border-slate-200 p-3">
+              <img src={`/api/review-qr/${c.id}/qr.svg`} alt={`QR code: ${c.label}`} className="h-24 w-24 rounded border border-slate-100" />
+              <div className="min-w-0 flex-1 text-sm">
+                <div className="font-semibold">
+                  {c.label}
+                  {where(c.connectionId) && data.locations.length > 1 && <span className="font-normal text-slate-500"> · {where(c.connectionId)}</span>}
+                </div>
+                <div className="text-slate-600">
+                  {c.scans} scan{c.scans === 1 ? '' : 's'} ({c.scansThisMonth} this month) · {c.reviews} review{c.reviews === 1 ? '' : 's'} after a scan
+                  {c.lastScan && <> · last {timeAgo(c.lastScan)}</>}
+                </div>
+                {!c.working && <div className="text-xs text-amber-700">No review link for this location: connect Google or add your review link above.</div>}
+                <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                  <a href={`/api/review-qr/${c.id}/print`} target="_blank" rel="noreferrer" className="font-semibold text-blue-600 hover:underline">
+                    🖨 Print counter card
+                  </a>
+                  <a href={`/api/review-qr/${c.id}/qr.png`} className="text-blue-600 hover:underline">
+                    Download picture (PNG)
+                  </a>
+                  <a href={`/api/review-qr/${c.id}/qr.svg`} download className="text-blue-600 hover:underline">
+                    Download for printers (SVG)
+                  </a>
+                  <button onClick={() => remove(c)} className="ml-auto text-red-600 hover:underline">
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={create} className="flex flex-wrap items-end gap-2 text-sm">
+        <label>
+          <span className="mb-1 block font-medium text-slate-700">Where it goes</span>
+          <input className={`${fieldInput} w-44`} maxLength={40} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Counter, Receipt" />
+        </label>
+        {data.locations.length > 1 && (
+          <label>
+            <span className="mb-1 block font-medium text-slate-700">Location</span>
+            <select className={`${fieldInput} w-auto`} value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+              {data.locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button className="rounded-md bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-700">+ Make a QR code</button>
+        {error && <span className="text-red-600">{error}</span>}
+      </form>
+      <p className="text-xs text-slate-500">
+        The code points to your ChatBird address. If ChatBird moves to a new web address later, keep the old one working (or reprint) so printed codes still scan.
+      </p>
     </section>
   );
 }
