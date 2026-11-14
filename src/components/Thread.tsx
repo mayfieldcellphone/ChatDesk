@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, CHANNEL_LABELS, fillReply, type Business, type Channel, type ConversationDetail, type InboxEvent, type Message, type SavedReply, type Tag } from '../api';
 import { TagMenu, TagPill } from './Tags';
+import { BookingCard, NewBooking } from './Bookings';
 
 interface Props {
   conversationId: string;
@@ -29,6 +30,7 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
   const [suggesting, setSuggesting] = useState(false);
   const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [addingBooking, setAddingBooking] = useState(false);
   const [photo, setPhoto] = useState<{ id: string | null; preview: string; uploading: boolean } | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
   const [pickerQuery, setPickerQuery] = useState('');
@@ -400,6 +402,22 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
           {conversation.status === 'open' ? 'Close' : 'Reopen'}
         </button>
       </header>
+      {(conversation.appointment || addingBooking) && (
+        <div className="border-b border-blue-100 bg-blue-50/60 px-4 py-2.5 md:px-6">
+          {addingBooking ? (
+            <NewBooking
+              conversationId={conversation.id}
+              onCancel={() => setAddingBooking(false)}
+              onAdded={(a) => {
+                setConversation((c) => (c ? { ...c, appointment: a } : c));
+                setAddingBooking(false);
+              }}
+            />
+          ) : (
+            <BookingCard key={conversation.appointment!.id} appointment={conversation.appointment!} onChanged={(a) => setConversation((c) => (c ? { ...c, appointment: a } : c))} />
+          )}
+        </div>
+      )}
       {conversation.reviewDueAt && conversation.status === 'closed' && (
         <div className="flex items-center gap-3 border-b border-amber-100 bg-amber-50 px-4 py-2 text-sm text-amber-900 md:px-6">
           ⭐ Review request goes out {new Date(conversation.reviewDueAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })} (between 9am and 8pm).
@@ -596,6 +614,14 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
           />
           <button type="button" onClick={() => photoInput.current?.click()} className={tool} title="Take a photo or choose one from your library">
             📷 <span>Photo</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setAddingBooking(true)}
+            className={tool}
+            title="Add a booking with a date and time, so they get reminder texts"
+          >
+            📅 <span>Booking</span>
           </button>
           <button type="button" onClick={insertContactCard} className={tool} title="Add your shop’s name, number, address and website so they can save it">
             👤 <span>Contact card</span>

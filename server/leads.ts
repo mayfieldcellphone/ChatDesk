@@ -7,6 +7,7 @@ import {
 import { onInboundMessage } from './inbound';
 import { replyChannels, sendToCustomer } from './outbound';
 import { rateLimit } from './rateLimit';
+import { createAppointment, parseWhen } from './bookings';
 
 /**
  * Website forms (bookings, quotes, business enquiries) posted by a website's own server, e.g. the
@@ -113,6 +114,12 @@ leadsRouter.post('/:token', rateLimit('website-lead', 120, 10 * 60 * 1000), (req
   const message = insertMessage(conversation, 'in', 'webchat', lines.join('\n'), { kind });
   // No away message: the visitor isn't in a chat to see it; you reply by text or email.
   onInboundMessage(business, conversation, message, { awayMessage: false });
+  if (booking) {
+    // A real date and time lets ChatBird send reminders (bookings.ts).
+    const iso = text(data.dateTime) && !Number.isNaN(Date.parse(text(data.dateTime))) ? new Date(text(data.dateTime)).toISOString() : null;
+    const startsAt = iso ?? parseWhen(text(data.date), text(data.time), business.timezone);
+    createAppointment(business, conversation, { startsAt, whenText: booking.when, device: booking.device, service: booking.service, source: 'website' });
+  }
   if (booking && business.booking_reply_enabled) sendBookingReply(business, conversation, name, booking);
   res.status(201).json({ ok: true, conversationId: conversation.id });
 });

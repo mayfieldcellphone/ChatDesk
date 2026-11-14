@@ -4,7 +4,7 @@ The one place to see where ChatBird is up to. Keep it short and current: update 
 every working session (Claude does this when asked, see CLAUDE.md). The printable folder version is
 made from the same information.
 
-Last updated: 8 Nov 2026
+Last updated: 14 Nov 2026
 
 ## Where things stand
 
@@ -38,6 +38,17 @@ Last updated: 8 Nov 2026
 | Meta for Developers | App “ChatBird” (Messenger, Instagram, posting) | developers.facebook.com |
 | UptimeRobot | Down alerts by email | uptimerobot.com |
 | Gmail SMTP | ChatBird’s emails | Google account |
+
+## In progress (on the work branch, not on main yet)
+
+- **Who's calling:** phone notification as a ChatBird call rings your mobile, and “ChatBird call
+  from Sarah, 0412…” when you answer (Settings → Phone calls, on by default). Australian networks
+  often show ChatBird's number instead of the caller's.
+- **Bookings with reminders:** new Bookings page. Website and AI receptionist bookings get a real
+  date and time; 📅 Booking adds one in a conversation. Texts the evening before and 2 hours before;
+  reply C confirms, R tags Needs reply. Mark Arrived / No-show; a no-show can get a “want to rebook?”
+  text. No-show rate on the Bookings page.
+- To go live: say “merge”, then update the server.
 
 ## What ChatBird does (v1.0)
 
@@ -103,6 +114,7 @@ Add-ons: extra location A$39, 1,000 texts A$90, receptionist minutes A$0.25.
 
 | Date | Decision | Why |
 |---|---|---|
+| Nov 2026 | Reminders on by default; automatic no-show texts off by default | A wrong “we missed you” text to someone in the shop is worse than none |
 | Oct 2026 | Build ChatBird instead of paying for Birdeye | Cost, control, AI features |
 | Nov 2026 | Name and address only change in Google itself, not from Listings | Google re-verifies those |
 | Nov 2026 | One codebase; Mayfield on its own server, pinned to tested versions | Selling must not disturb the shop |

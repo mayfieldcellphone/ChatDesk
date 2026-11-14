@@ -14,9 +14,10 @@ import { firstName } from './campaigns';
 import { requireAuth } from './auth';
 import { refreshCallMessage } from './calls';
 import { config } from './config';
-import { DAYS, isOpen, localTime, parseHours } from './hours';
+import { DAYS, isOpen, localDateIn, localTime, parseHours } from './hours';
 import { onInboundMessage } from './inbound';
 import { fillBookingReply } from './leads';
+import { createAppointment, parseWhen } from './bookings';
 import { sendToCustomer } from './outbound';
 import { rateLimit } from './rateLimit';
 import { publicUrl, sendSms, twiml } from './twilio';
@@ -131,6 +132,8 @@ const TOOLS: Anthropic.Tool[] = [
         device: { type: 'string' },
         issue: { type: 'string' },
         preferred_time: { type: 'string', description: 'Day and time they asked for, in their words' },
+        date: { type: 'string', description: 'The booking date as YYYY-MM-DD, worked out from today’s date (e.g. "Monday" → the coming Monday). Leave out if they gave no day.' },
+        time: { type: 'string', description: 'The booking time as HH:MM in 24-hour time (e.g. "2pm" → 14:00). Leave out if they gave no time.' },
       },
       required: ['name', 'device', 'issue', 'preferred_time'],
     },
@@ -216,7 +219,7 @@ function contextNote(session: Session) {
   const open = session.business.hours_enabled ? (isOpen(session.business) ? 'open now' : 'closed now') : 'hours not set';
   const known = session.contact && firstName(session.contact) ? ` Their name is on file as ${session.contact.name}.` : '';
   const greeting = spokenGreeting(session.business);
-  return `It is ${day} ${time} at the shop (${open}). The caller is ${session.callerNumber ? `calling from ${session.callerNumber}` : 'on a private number'}.${known} When the call connected you said: "${greeting}"`;
+  return `It is ${day} ${localDateIn(session.business.timezone)} ${time} at the shop (${open}). The caller is ${session.callerNumber ? `calling from ${session.callerNumber}` : 'on a private number'}.${known} When the call connected you said: "${greeting}"`;
 }
 
 const text = (v: unknown, max = 300) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -239,6 +242,9 @@ async function runTool(session: Session, name: string, input: Record<string, unk
       saveName(session, name);
       const lines = ['Booking request (AI receptionist)', `Name: ${name}`, mobile ? `Mobile: ${mobile}` : '', `Device: ${device}`, `Issue: ${issue}`, `When: ${when}`].filter(Boolean);
       const message = insertMessage(session.conversation, 'in', 'sms', lines.join('\n'), { kind: 'booking' });
+      // With a date and time, the customer gets reminders (bookings.ts).
+      const startsAt = /^\d{4}-\d{2}-\d{2}$/.test(text(input.date, 10)) && /^\d{1,2}:\d{2}$/.test(text(input.time, 5)) ? parseWhen(text(input.date, 10), text(input.time, 5), business.timezone) : null;
+      createAppointment(business, session.conversation, { startsAt, whenText: when, device, service: issue, source: 'receptionist' });
       onInboundMessage(business, session.conversation, message, { awayMessage: false });
       tagConversation(business.id, session.conversation.id, { name: 'AI booking', color: '#087565' });
       // The same "Automatic booking reply" as website bookings, when it's switched on.

@@ -7,6 +7,7 @@ import { handleOptOutText } from './campaigns';
 import { sendToCustomer } from './outbound';
 import { fetchTwilioMedia, twiml, verifyTwilio } from './twilio';
 import { MAX_PHOTO_BYTES, saveMedia } from './media';
+import { handleBookingReply } from './bookings';
 
 export const smsRouter = Router();
 smsRouter.use(express.urlencoded({ extended: false }), verifyTwilio);
@@ -53,6 +54,8 @@ smsRouter.post('/inbound', async (req, res) => {
     sendToCustomer(business, conversation, 'sms', optOut, { automated: true }).catch((err) => console.error('Opt-out confirmation failed:', err.message));
     return reply();
   }
+  // "C" / "R" answers to a booking reminder.
+  if (body && (await handleBookingReply(business, conversation, message).catch((err) => (console.error('Booking reply failed:', err), false)))) return reply();
   onInboundMessage(business, conversation, message);
   reply();
 });

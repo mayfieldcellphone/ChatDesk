@@ -18,6 +18,7 @@ import { proposeFromWebsite, WebsiteError } from './website';
 import { normalizeRepairbillUrl, sendLead } from './repairbill';
 import { leadToken } from './leads';
 import { leadSourceLine } from './leadSource';
+import { conversationAppointment } from './bookings';
 import { cancelReviewRequest, recordReviewRequest, requestLink, reviewRequestText, scheduleReviewRequest } from './reviewRequests';
 import { assistantPausedNow, decide, faqNeedsEditing, parseTable } from './assistant';
 import { pushPublicKey, pushToBusiness } from './push';
@@ -52,6 +53,7 @@ function publicBusiness(b: Business) {
     emailAvailable: emailConfigured(),
     forwardNumber: b.forward_number,
     ringSeconds: b.ring_seconds,
+    callWhisper: Boolean(b.call_whisper),
     voicemailGreeting: b.voicemail_greeting,
     missedCallTextEnabled: Boolean(b.missed_call_text_enabled),
     missedCallText: b.missed_call_text,
@@ -273,9 +275,10 @@ inboxRouter.patch('/business', (req, res) => {
   run(
     `UPDATE businesses SET name = ?, greeting = ?, color = ?, sms_number = ?, hours_enabled = ?, timezone = ?,
        hours = ?, away_message = ?, ai_notes = ?, forward_number = ?, ring_seconds = ?, voicemail_greeting = ?,
-       missed_call_text_enabled = ?, missed_call_text = ?, review_link = ?, review_request_text = ? WHERE id = ?`,
+       missed_call_text_enabled = ?, missed_call_text = ?, review_link = ?, review_request_text = ?, call_whisper = ? WHERE id = ?`,
     name, greeting, color, smsNumber, hoursEnabled, timezone, hours, awayMessage, aiNotes,
-    forwardNumber, ringSeconds, voicemailGreeting, missedCallTextEnabled, missedCallText, reviewLinkValue, reviewRequestText, businessId,
+    forwardNumber, ringSeconds, voicemailGreeting, missedCallTextEnabled, missedCallText, reviewLinkValue, reviewRequestText,
+    b.callWhisper === undefined ? business.call_whisper : b.callWhisper ? 1 : 0, businessId,
   );
   res.json({ business: publicBusiness(loadBusiness(businessId)) });
 });
@@ -679,6 +682,7 @@ inboxRouter.get('/conversations/:id', (req, res) => {
       assistantPaused: assistantPausedNow(conversation.id),
       reviewDueAt: (conversation as Conversation & { review_due_at?: string | null }).review_due_at ?? null,
       source: leadSourceLine(conversation),
+      appointment: conversationAppointment(conversation.id),
     },
     messages: loadMessages(conversation.id),
   });

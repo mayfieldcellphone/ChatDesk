@@ -430,6 +430,7 @@ function PhoneSection({ business, userPhone, onSaved, onUserPhoneChange }: Props
     voicemailGreeting: business.voicemailGreeting,
     missedCallTextEnabled: business.missedCallTextEnabled,
     missedCallText: business.missedCallText,
+    callWhisper: business.callWhisper,
   });
   const [myPhone, setMyPhone] = useState(userPhone ?? '');
   const [status, setStatus] = useState<Status>(null);
@@ -474,6 +475,16 @@ function PhoneSection({ business, userPhone, onSaved, onUserPhoneChange }: Props
           <label className={label} htmlFor="ring">Ring for (seconds) before voicemail</label>
           <input id="ring" type="number" min={5} max={60} className={`${input} w-28`} value={form.ringSeconds} onChange={(e) => setForm({ ...form, ringSeconds: Number(e.target.value) })} />
         </div>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-0.5 h-4 w-4" checked={form.callWhisper} onChange={(e) => setForm({ ...form, callWhisper: e.target.checked })} />
+          <span>
+            <span className="font-medium">Say who’s calling when I answer</span>{' '}
+            <span className="text-slate-500">
+              · Your phone may show ChatBird’s number instead of the customer’s. With this on you hear “ChatBird call from Sarah, 0412…” before you’re connected. You also get a
+              notification with the caller as it rings.
+            </span>
+          </span>
+        </label>
         <div>
           <label className={label} htmlFor="vm">Voicemail greeting (read out to callers)</label>
           <textarea id="vm" rows={3} maxLength={500} className={input} value={form.voicemailGreeting} onChange={(e) => setForm({ ...form, voicemailGreeting: e.target.value })} required />

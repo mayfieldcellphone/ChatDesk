@@ -462,6 +462,35 @@ db.exec(`
 `);
 // Set when a review arrived soon after someone scanned that location's QR code.
 addColumn('reviews', 'via_qr', 'TEXT');
+db.exec(`
+  -- Bookings with a date and time (bookings.ts): reminders, confirmations, arrived / no-show.
+  CREATE TABLE IF NOT EXISTS appointments (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    contact_id TEXT NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    starts_at TEXT,
+    when_text TEXT NOT NULL DEFAULT '',
+    device TEXT NOT NULL DEFAULT '',
+    service TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'booked',
+    source TEXT NOT NULL DEFAULT 'manual',
+    reminder_day_at TEXT,
+    reminder_soon_at TEXT,
+    no_show_text_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS appointments_business ON appointments(business_id, starts_at);
+  CREATE INDEX IF NOT EXISTS appointments_conversation ON appointments(conversation_id);
+`);
+addColumn('businesses', 'booking_reminders', 'INTEGER NOT NULL DEFAULT 1');
+addColumn('businesses', 'reminder_day_text', "TEXT NOT NULL DEFAULT 'Hi {name}, a reminder of your {device} booking at {business} tomorrow ({day}) at {time}. Reply C to confirm or R if you need to change it.'");
+addColumn('businesses', 'reminder_soon_text', "TEXT NOT NULL DEFAULT 'Hi {name}, see you at {time} today at {business}, {address}. Running late or need to change? Just reply here.'");
+addColumn('businesses', 'no_show_auto', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('businesses', 'no_show_text', "TEXT NOT NULL DEFAULT 'Hi {name}, sorry we missed you today at {business}! Would you like to rebook your {device} repair? Just reply with a day and time that suits.'");
+// Say who's calling when the owner answers a call ChatBird puts through (voice.ts /whisper).
+addColumn('businesses', 'call_whisper', 'INTEGER NOT NULL DEFAULT 1');
 // Photos in conversations (media.ts). Customers' photos are private: only the team can see them.
 addColumn('messages', 'media_id', 'TEXT');
 addColumn('media', 'private', 'INTEGER NOT NULL DEFAULT 0');
@@ -528,6 +557,7 @@ export interface Business {
   review_track_clicks: number;
   reviews_widget: string;
   special_hours: string;
+  call_whisper: number;
   address: string;
   pricing_mode: 'off' | 'from' | 'exact';
   pricing_rules: string;

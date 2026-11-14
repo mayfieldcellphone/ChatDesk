@@ -18,6 +18,7 @@ import { reviewLinkRouter, reviewRequestsRouter, startReviewRequests } from './r
 import { backupRouter, startBackups } from './backup';
 import { conversationMediaRouter } from './media';
 import { listingsRouter } from './listings';
+import { bookingsRouter, startBookingReminders } from './bookings';
 import { qrRedirectRouter, reviewQrRouter } from './reviewQr';
 import { all, db, type Connection } from './db';
 
@@ -93,6 +94,7 @@ app.use('/r', reviewLinkRouter);
 app.use('/api/backups', backupRouter);
 app.use('/api/media', conversationMediaRouter);
 app.use('/api/listings', listingsRouter);
+app.use('/api/bookings', bookingsRouter);
 app.use('/api/review-qr', reviewQrRouter);
 app.use('/q', qrRedirectRouter);
 app.use('/api', inboxRouter);
@@ -130,6 +132,7 @@ startCampaigns();
 startScheduledPosts();
 startReviewRequests();
 startBackups();
+startBookingReminders();
 
 const port = Number(process.env.PORT) || 3000;
 const server = app.listen(port, () => console.log(`ChatBird running on http://localhost:${port}`));

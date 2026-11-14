@@ -14,6 +14,7 @@ import { publicUrl, twiml, verifyTwilio } from './twilio';
 import { transcribeVoicemail, transcriptionConfigured } from './transcribe';
 import { receptionistAvailable, relayTwiml, transferNumber } from './receptionist';
 import { tagConversation } from './assistant';
+import { pushToBusiness } from './push';
 
 // Twilio Voice webhooks. Point the number's "A call comes in" at /api/voice/incoming and
 // "Call status changes" at /api/voice/status. The other URLs are handed to Twilio in the TwiML below.
@@ -81,12 +82,54 @@ voiceRouter.post('/incoming', (req, res) => {
 
   // Ring the shop first during opening hours; the caller hears ringing until someone answers.
   if (business.forward_number && business.forward_number !== from && isOpen(business)) {
+    // Australian networks often show ChatBird's own number on the mobile instead of the caller's,
+    // so say who it is: a notification as it rings, and (optionally) a short announcement on answering.
+    announceCaller(business, from, params.CallSid).catch((err) => console.error('Caller notification failed:', err.message));
     return sendTwiml(
       res,
-      twiml`<Dial timeout="${business.ring_seconds}" answerOnBridge="true" action="${publicUrl()}/api/voice/dial-status"><Number>${business.forward_number}</Number></Dial>`,
+      business.call_whisper
+        ? twiml`<Dial timeout="${business.ring_seconds}" answerOnBridge="true" action="${publicUrl()}/api/voice/dial-status"><Number url="${publicUrl()}/api/voice/whisper">${business.forward_number}</Number></Dial>`
+        : twiml`<Dial timeout="${business.ring_seconds}" answerOnBridge="true" action="${publicUrl()}/api/voice/dial-status"><Number>${business.forward_number}</Number></Dial>`,
     );
   }
   sendTwiml(res, ai && mode === 'no_answer' ? relayTwiml(business, params.CallSid) : voicemailTwiml(business));
+});
+
+/** Who's calling, as the team knows them: the saved name if there is one, and the number. */
+function callerLabel(business: Business, from: string | null) {
+  if (!from) return { name: null, number: 'a private number', hidden: false };
+  // Calls forwarded from the shop landline sometimes arrive with the landline's number instead of the caller's.
+  const own = [business.sms_number, business.forward_number, normalizePhone(business.widget_call_number)].filter(Boolean);
+  if (own.includes(from)) return { name: null, number: from, hidden: true };
+  const contact = get<Contact>('SELECT * FROM contacts WHERE business_id = ? AND phone = ?', business.id, from);
+  const name = contact && !/^\+?[\d\s()-]+$/.test(contact.name) ? contact.name : null;
+  return { name, number: from, hidden: false };
+}
+
+const spokenNumber = (e164: string) => e164.replace(/^\+61/, '0').replace(/\D/g, '').split('').join(' ');
+
+async function announceCaller(business: Business, from: string | null, callSid: string) {
+  const who = callerLabel(business, from);
+  const call = loadCall(callSid);
+  const local = who.number.replace(/^\+61(\d)(\d{2,3})(\d{3})(\d{3})$/, '0$1$2 $3 $4');
+  await pushToBusiness(business.id, {
+    title: `📞 ${who.name ?? local} is calling`,
+    body: who.hidden ? 'Your landline forwarding hid the caller’s number.' : `${who.name ? `${local} · ` : ''}Tap to see the conversation.`,
+    url: call ? `/?business=${business.id}&conversation=${call.conversation_id}` : `/?business=${business.id}`,
+    tag: `call-${callSid}`,
+  });
+}
+
+// Played only to the owner when they answer, before the caller is connected.
+voiceRouter.post('/whisper', (req, res) => {
+  const params = req.body as Record<string, string>;
+  const call = loadCall(params.ParentCallSid || params.CallSid);
+  const business = call && get<Business>('SELECT * FROM businesses WHERE id = ?', call.business_id);
+  if (!call || !business) return sendTwiml(res, twiml``);
+  const from = get<{ phone: string | null }>('SELECT k.phone FROM conversations v JOIN contacts k ON k.id = v.contact_id WHERE v.id = ?', call.conversation_id)?.phone ?? null;
+  const who = callerLabel(business, from);
+  const what = who.hidden || !from ? 'a caller whose number is hidden' : `${who.name ? `${who.name}, ` : ''}${spokenNumber(who.number)}`;
+  sendTwiml(res, twiml`<Say language="en-AU">ChatBird call from ${what}.</Say>`);
 });
 
 voiceRouter.post('/dial-status', (req, res) => {

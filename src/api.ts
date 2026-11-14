@@ -16,6 +16,7 @@ export interface Business {
   emailAvailable: boolean;
   forwardNumber: string | null;
   ringSeconds: number;
+  callWhisper: boolean;
   voicemailGreeting: string;
   missedCallTextEnabled: boolean;
   missedCallText: string;
@@ -147,6 +148,8 @@ export interface ConversationDetail {
   reviewDueAt: string | null;
   /** Where the lead came from, e.g. "Website chat · Google Maps · /screen-repair". */
   source: string;
+  /** The conversation's current booking, if any (Bookings page). */
+  appointment: import('./components/Bookings').Appointment | null;
   /** …because staff replied: it answers again 30 minutes after their last message. */
 }
 
