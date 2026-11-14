@@ -8,7 +8,7 @@ Last updated: 14 Nov 2026
 
 ## Where things stand
 
-- **ChatBird v1.0** runs Mayfield Phone Repair (Birdeye cancelled). v1.0 = commit `2d023d1` on `main`.
+- **ChatBird v1.1** runs Mayfield Phone Repair (Birdeye cancelled). v1.0 = commit `2d023d1`; v1.1 (who's calling, bookings with reminders) merged to `main` on 14 Nov 2026.
 - **Branches:** `main` is the tested version Mayfield runs. New work happens on other branches and only reaches `main` when the owner says “merge”.
 - **Live server:** Hostinger VPS, folder `/opt/chatdesk`, address https://chatdesk.31-97-66-240.sslip.io
 - **Mayfield stays on v1.0** while ChatBird is made into a product. Only update it after a new
@@ -39,7 +39,7 @@ Last updated: 14 Nov 2026
 | UptimeRobot | Down alerts by email | uptimerobot.com |
 | Gmail SMTP | ChatBird’s emails | Google account |
 
-## In progress (on the work branch, not on main yet)
+## Added in v1.1 (14 Nov 2026, on main)
 
 - **Who's calling:** phone notification as a ChatBird call rings your mobile, and “ChatBird call
   from Sarah, 0412…” when you answer (Settings → Phone calls, on by default). Australian networks
@@ -48,8 +48,6 @@ Last updated: 14 Nov 2026
   date and time; 📅 Booking adds one in a conversation. Texts the evening before and 2 hours before;
   reply C confirms, R tags Needs reply. Mark Arrived / No-show; a no-show can get a “want to rebook?”
   text. No-show rate on the Bookings page.
-- To go live: say “merge”, then update the server.
-
 ## What ChatBird does (v1.0)
 
 - **Inbox:** website chat, texts (with photos), Messenger, Instagram, email, calls and voicemails in
