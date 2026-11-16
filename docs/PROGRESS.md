@@ -55,8 +55,9 @@ Last updated: 16 Nov 2026
   directions, what people searched); Google Search Console (clicks, searches, “close to the top”
   searches, top pages); Website check (reads a page, Google speed test, AI to-do list with
   ready-to-paste titles and text); business details for Google (schema) added through the chat widget.
-- **Before using on Mayfield:** in Google Cloud turn on Business Profile Performance API and Google
-  Search Console API, and add the `webmasters.readonly` scope (docs/INTEGRATIONS.md, step 7).
+- **Google Cloud is ready** (16 Nov 2026, project ChatDesk): both APIs on, `webmasters.readonly` scope added.
+  Search Console: use the verified URL-prefix property `https://mayfieldphonerepair.com.au/` (the Domain
+  property isn't verified; ChatBird skips it).
 
 ## What ChatBird does (v1.0)
 

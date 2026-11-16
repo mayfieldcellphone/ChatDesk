@@ -1,7 +1,7 @@
-import { Router, type Request } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { lookup } from 'node:dns/promises';
 import net from 'node:net';
-import { requireAuth, signOAuthState } from './auth';
+import { readSession, requireAuth, signOAuthState, verifyOAuthState } from './auth';
 import { all, get, newId, now, run, type Business, type Connection } from './db';
 import { decrypt, encrypt } from './crypto';
 import { accessToken, GoogleError, googleApi, googleAuthUrl, googleConfigured, googleFetch, googleRedirectUri, locationPath, tokenRequest } from './google';
@@ -881,7 +881,29 @@ export function searchConsoleAuthUrl(businessId: string, userId: string) {
   return googleAuthUrl(googleRedirectUri(), signOAuthState({ businessId, userId, provider: 'search_console' }), GSC_SCOPE);
 }
 
-/** Finishes the Search Console sign-in (from the shared Google callback). */
+/**
+ * Google sends every sign-in back to the one registered callback address (/api/google/callback or
+ * /api/integrations/google/callback). This handles it when the sign-in was for Search Console; returns
+ * false for anything else so the Business Profile sign-in carries on as before.
+ */
+export async function handleSearchConsoleCallback(req: Request, res: Response) {
+  const state = verifyOAuthState(String(req.query.state ?? ''));
+  if (state?.provider !== 'search_console') return false;
+  const back = (q: string) => res.redirect(`/?view=seo&${q}`);
+  if (readSession(req)?.userId !== state.userId) back('error=' + encodeURIComponent('That sign-in link expired. Try connecting again.'));
+  else if (req.query.error) back('error=' + encodeURIComponent('Search Console sign-in was cancelled.'));
+  else {
+    try {
+      await connectSearchConsole(state.businessId, String(req.query.code ?? ''));
+      back('connected=' + encodeURIComponent('Google Search Console'));
+    } catch (err) {
+      back('error=' + encodeURIComponent((err as Error).message));
+    }
+  }
+  return true;
+}
+
+/** Finishes the Search Console sign-in. */
 export async function connectSearchConsole(businessId: string, code: string) {
   const tokens = await tokenRequest({ grant_type: 'authorization_code', code, redirect_uri: googleRedirectUri() });
   const existing = get<GscLink>('SELECT * FROM search_console_links WHERE business_id = ?', businessId);

@@ -20,7 +20,7 @@ import { conversationMediaRouter } from './media';
 import { listingsRouter } from './listings';
 import { bookingsRouter, startBookingReminders } from './bookings';
 import { qrRedirectRouter, reviewQrRouter } from './reviewQr';
-import { connectSearchConsole, seoRouter } from './seo';
+import { handleSearchConsoleCallback, seoRouter } from './seo';
 import { all, db, type Connection } from './db';
 
 const app = express();
@@ -48,18 +48,9 @@ app.get('/api/google/connect', (req, res) => {
 });
 
 app.get('/api/google/callback', async (req, res) => {
+  if (await handleSearchConsoleCallback(req, res)) return;
   const state = verifyOAuthState(String(req.query.state ?? ''));
   // The person finishing sign-in must be the one who started it (as on the Integrations page).
-  if (state?.provider === 'search_console' && readSession(req)?.userId === state.userId) {
-    // Search Console has its own read-only sign-in but shares this callback address.
-    if (req.query.error) return res.redirect('/?view=seo&error=' + encodeURIComponent('Search Console sign-in was cancelled.'));
-    try {
-      await connectSearchConsole(state.businessId, String(req.query.code ?? ''));
-      return res.redirect('/?view=seo&connected=' + encodeURIComponent('Google Search Console'));
-    } catch (err) {
-      return res.redirect('/?view=seo&error=' + encodeURIComponent((err as Error).message));
-    }
-  }
   if (!state || state.provider !== 'google' || readSession(req)?.userId !== state.userId) {
     return res.redirect('/?view=integrations&error=' + encodeURIComponent('That sign-in link expired. Try connecting again.'));
   }

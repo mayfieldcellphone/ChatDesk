@@ -5,6 +5,7 @@ import { aiConfigured, AiError, suggestReviewReply } from './ai';
 import { connectGoogleLocations, googleAuthUrl, googleConfigured, googleRedirectUri, replyToReview, reviewLink, syncReviews } from './google';
 import { connectMetaAccounts, disconnectMeta, metaAuthUrl, metaConfigured } from './meta';
 import { rateLimit } from './rateLimit';
+import { handleSearchConsoleCallback } from './seo';
 import { publicUrl, smsConfigured } from './twilio';
 import { configStatus, isAdmin, MANAGED_KEYS, saveConfig } from './config';
 
@@ -34,6 +35,7 @@ function checkCallback(req: Parameters<typeof readSession>[0], provider: 'google
 }
 
 integrationsRouter.get('/google/callback', async (req, res) => {
+  if (await handleSearchConsoleCallback(req, res)) return;
   const { state, error } = checkCallback(req, 'google');
   if (!state) return finish(res, { ok: false, error: error! });
   if (req.query.error) return finish(res, { ok: false, error: 'Google sign-in was cancelled.' });
