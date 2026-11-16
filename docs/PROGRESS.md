@@ -8,7 +8,7 @@ Last updated: 16 Nov 2026
 
 ## Where things stand
 
-- **ChatBird v1.1** runs Mayfield Phone Repair (Birdeye cancelled). v1.0 = commit `2d023d1`; v1.1 (who's calling, bookings with reminders) merged to `main` on 14 Nov 2026.
+- **ChatBird v1.2** runs Mayfield Phone Repair (Birdeye cancelled). v1.0 = commit `2d023d1`; v1.1 (who's calling, bookings with reminders) merged to `main` on 14 Nov 2026; v1.2 (SEO page) on 16 Nov 2026.
 - **Branches:** `main` is the tested version Mayfield runs. New work happens on other branches and only reaches `main` when the owner says “merge”.
 - **Live server:** Hostinger VPS, folder `/opt/chatdesk`, address https://chatdesk.31-97-66-240.sslip.io
 - **Mayfield stays on v1.0** while ChatBird is made into a product. Only update it after a new
@@ -48,7 +48,7 @@ Last updated: 16 Nov 2026
   date and time; 📅 Booking adds one in a conversation. Texts the evening before and 2 hours before;
   reply C confirms, R tags Needs reply. Mark Arrived / No-show; a no-show can get a “want to rebook?”
   text. No-show rate on the Bookings page.
-## On the work branch, not yet on main (16 Nov 2026)
+## Added in v1.2 (16 Nov 2026, on main)
 
 - **SEO page:** Google Profile score (description, categories, services, photos, posts, reviews,
   replies) with “Fix in…” buttons; Profile insights (views on Search and Maps, calls, website clicks,
