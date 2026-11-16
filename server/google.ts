@@ -15,7 +15,8 @@ import { markQrReviews } from './reviewQr';
 const SCOPE = 'https://www.googleapis.com/auth/business.manage';
 const SYNC_EVERY_MS = 15 * 60 * 1000;
 // Overridable so tests can point at a fake Google.
-const api = (host: string) => process.env.GOOGLE_API_BASE ? `${process.env.GOOGLE_API_BASE.replace(/\/$/, '')}/${host}` : `https://${host}`;
+export const googleApi = (host: string) => process.env.GOOGLE_API_BASE ? `${process.env.GOOGLE_API_BASE.replace(/\/$/, '')}/${host}` : `https://${host}`;
+const api = googleApi;
 
 export const googleConfigured = () => Boolean(config('GOOGLE_CLIENT_ID') && config('GOOGLE_CLIENT_SECRET'));
 
@@ -25,19 +26,19 @@ export function googleRedirectUri() {
 
 export class GoogleError extends Error {}
 
-export function googleAuthUrl(redirectUri: string, state: string) {
+export function googleAuthUrl(redirectUri: string, state: string, scope = SCOPE) {
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
   url.searchParams.set('client_id', config('GOOGLE_CLIENT_ID')!);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', SCOPE);
+  url.searchParams.set('scope', scope);
   url.searchParams.set('access_type', 'offline'); // get a refresh token so syncing keeps working
   url.searchParams.set('prompt', 'consent');
   url.searchParams.set('state', state);
   return url.toString();
 }
 
-async function tokenRequest(params: Record<string, string>) {
+export async function tokenRequest(params: Record<string, string>) {
   const clientId = config('GOOGLE_CLIENT_ID');
   const clientSecret = config('GOOGLE_CLIENT_SECRET');
   if (!clientId || !clientSecret) throw new GoogleError('Google Client ID and Secret are not configured.');
@@ -61,7 +62,7 @@ async function tokenRequest(params: Record<string, string>) {
   return data as { access_token: string; refresh_token?: string; expires_in: number };
 }
 
-async function googleFetch<T>(token: string, url: string, init: { method?: string; body?: unknown } = {}, retryCount = 0): Promise<T> {
+export async function googleFetch<T>(token: string, url: string, init: { method?: string; body?: unknown } = {}, retryCount = 0): Promise<T> {
   const maxRetries = 3;
   let res: Response;
   try {
@@ -173,7 +174,7 @@ export async function connectGoogleLocations(businessId: string, code: string, r
 }
 
 /** A valid access token for the connection, refreshing it when it's about to expire. */
-async function accessToken(connection: Connection): Promise<string> {
+export async function accessToken(connection: Connection): Promise<string> {
   if (connection.token_expires_at && Date.parse(connection.token_expires_at) - Date.now() > 60_000) {
     try {
       return decrypt(connection.access_token);
@@ -402,7 +403,7 @@ const toGDate = (date: string): GDate => {
   return { year, month, day };
 };
 const fromGDate = (d: GDate) => `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
-const locationPath = (connection: Connection) => `locations/${connection.external_id.split('/locations/')[1] ?? connection.external_id}`;
+export const locationPath = (connection: Connection) => `locations/${connection.external_id.split('/locations/')[1] ?? connection.external_id}`;
 
 export interface ListingDetails {
   name: string;

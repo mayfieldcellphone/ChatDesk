@@ -5,13 +5,14 @@ import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Reviews from './components/Reviews';
 import Listings from './components/Listings';
+import Seo from './components/Seo';
 import Bookings from './components/Bookings';
 import Integrations from './components/Integrations';
 import Reports from './components/Reports';
 import Marketing from './components/Marketing';
 import { Logo, Wordmark } from './components/Logo';
 
-const VIEWS = ['inbox', 'bookings', 'reports', 'marketing', 'reviews', 'listings', 'integrations', 'settings'] as const;
+const VIEWS = ['inbox', 'bookings', 'reports', 'marketing', 'reviews', 'listings', 'seo', 'integrations', 'settings'] as const;
 type View = (typeof VIEWS)[number];
 
 // Line icons for the side menu (24px grid, drawn with the current text colour).
@@ -22,6 +23,7 @@ const VIEW_ICONS: Record<View, string[]> = {
   reviews: ['m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z'],
   bookings: ['M8 3v4', 'M16 3v4', 'M4 9h16', 'M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z', 'm9 15 2 2 4-4'],
   listings: ['M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z', 'M12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'],
+  seo: ['M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13z', 'm20 20-4.8-4.8', 'm7.5 12 2-2 1.5 1.5 2.5-2.5'],
   integrations: ['M9 7V3', 'M15 7V3', 'M6 7h12v4a6 6 0 0 1-12 0z', 'M12 17v4'],
   settings: ['M4 6h9', 'M17 6h3', 'M4 12h3', 'M11 12h9', 'M4 18h11', 'M19 18h1', 'M15 4a2 2 0 1 1 0 4a2 2 0 1 1 0-4', 'M9 10a2 2 0 1 1 0 4a2 2 0 1 1 0-4', 'M17 16a2 2 0 1 1 0 4a2 2 0 1 1 0-4'],
 };
@@ -158,7 +160,7 @@ export default function App() {
           <span className={view === v ? 'text-blue-300' : 'text-slate-400'}>
             <ViewIcon view={v} />
           </span>
-          {v}
+          {v === 'seo' ? 'SEO' : v}
         </button>
       ))}
       <div className="mt-auto border-t border-slate-800 px-5 py-4 text-xs">
@@ -184,7 +186,7 @@ export default function App() {
         <Logo size={26} />
         <span className="h-2.5 w-2.5 rounded-full" style={{ background: me.business.color }} />
         <span className="truncate font-semibold">{me.business.name}</span>
-        <span className="ml-auto text-sm capitalize text-slate-400">{view}</span>
+        <span className="ml-auto text-sm capitalize text-slate-400">{view === 'seo' ? 'SEO' : view}</span>
       </header>
       {menuOpen && (
         <div className="fixed inset-0 z-40 flex md:hidden">
@@ -213,6 +215,8 @@ export default function App() {
           <Bookings key={me.business.id} onOpenConversation={(id) => openConversation(me.business.id, id)} />
         ) : view === 'listings' ? (
           <Listings key={me.business.id} onOpenIntegrations={() => setView('integrations')} />
+        ) : view === 'seo' ? (
+          <Seo key={me.business.id} onNavigate={(v) => setView(v)} />
         ) : view === 'integrations' ? (
           <Integrations
             key={me.business.id}

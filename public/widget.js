@@ -513,6 +513,21 @@
     panel.style.maxHeight = 'calc(100vh - ' + (y + 100) + 'px)';
   }
 
+  // Business details for Google (schema.org JSON-LD), when turned on in ChatBird (SEO page).
+  // Skipped when the page already describes the business itself.
+  function addSchema(schema) {
+    if (!schema || document.getElementById('chatbird-schema')) return;
+    var existing = document.querySelectorAll('script[type="application/ld+json"]');
+    for (var i = 0; i < existing.length; i++) {
+      if (existing[i].textContent.indexOf('"' + schema['@type'] + '"') !== -1) return;
+    }
+    var tag = document.createElement('script');
+    tag.type = 'application/ld+json';
+    tag.id = 'chatbird-schema';
+    tag.textContent = JSON.stringify(schema);
+    document.head.appendChild(tag);
+  }
+
   // ---------- Boot ----------
   request('GET', '/config').then(function (config) {
     state.config = config;
@@ -522,6 +537,7 @@
     if (config.open === false) root.querySelector('.head .away').style.display = 'block';
     place(config);
     document.body.appendChild(host);
+    addSchema(config.schema);
 
     state.session = loadSession();
     buildQuick();

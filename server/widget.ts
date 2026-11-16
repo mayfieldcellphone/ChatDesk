@@ -1,3 +1,4 @@
+import { businessSchema } from './seo';
 import { Router, type Request, type Response } from 'express';
 import crypto from 'node:crypto';
 import {
@@ -76,6 +77,8 @@ widgetRouter.get('/:key/config', (req, res) => {
     options: { quote: Boolean(business.widget_quote), callback: Boolean(business.widget_callback), callNumber: business.widget_call_number },
     // Shortcuts to the same options, shown above the closed chat button.
     buttons: Boolean(business.widget_buttons),
+    // Business details for Google (schema.org), added to the page when the owner turns it on (SEO page).
+    schema: business.seo_schema_inject ? businessSchema(business.id) : null,
   });
 });
 

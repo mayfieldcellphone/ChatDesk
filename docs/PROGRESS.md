@@ -4,7 +4,7 @@ The one place to see where ChatBird is up to. Keep it short and current: update 
 every working session (Claude does this when asked, see CLAUDE.md). The printable folder version is
 made from the same information.
 
-Last updated: 14 Nov 2026
+Last updated: 16 Nov 2026
 
 ## Where things stand
 
@@ -48,6 +48,16 @@ Last updated: 14 Nov 2026
   date and time; 📅 Booking adds one in a conversation. Texts the evening before and 2 hours before;
   reply C confirms, R tags Needs reply. Mark Arrived / No-show; a no-show can get a “want to rebook?”
   text. No-show rate on the Bookings page.
+## On the work branch, not yet on main (16 Nov 2026)
+
+- **SEO page:** Google Profile score (description, categories, services, photos, posts, reviews,
+  replies) with “Fix in…” buttons; Profile insights (views on Search and Maps, calls, website clicks,
+  directions, what people searched); Google Search Console (clicks, searches, “close to the top”
+  searches, top pages); Website check (reads a page, Google speed test, AI to-do list with
+  ready-to-paste titles and text); business details for Google (schema) added through the chat widget.
+- **Before using on Mayfield:** in Google Cloud turn on Business Profile Performance API and Google
+  Search Console API, and add the `webmasters.readonly` scope (docs/INTEGRATIONS.md, step 7).
+
 ## What ChatBird does (v1.0)
 
 - **Inbox:** website chat, texts (with photos), Messenger, Instagram, email, calls and voicemails in
@@ -112,12 +122,17 @@ Add-ons: extra location A$39, 1,000 texts A$90, receptionist minutes A$0.25.
 
 | Date | Decision | Why |
 |---|---|---|
+| 16 Nov 2026 | Search Console has its own read-only sign-in | Adding a scope to the Business Profile sign-in could break reviews if Google refused it |
+| 16 Nov 2026 | Website schema added by the chat widget is off by default | Some sites already have their own; the owner chooses |
 | Nov 2026 | Reminders on by default; automatic no-show texts off by default | A wrong “we missed you” text to someone in the shop is worse than none |
 | Oct 2026 | Build ChatBird instead of paying for Birdeye | Cost, control, AI features |
 | Nov 2026 | Name and address only change in Google itself, not from Listings | Google re-verifies those |
 | Nov 2026 | One codebase; Mayfield on its own server, pinned to tested versions | Selling must not disturb the shop |
 
 ## Parking lot (ideas for later)
+
+- SEO phase B: local rank grid on Maps (paid search data, ~A$5–15/month per business), competitors, weekly SEO email
+- SEO phase C: monthly content suggestions, AI visibility check
 
 - Own domain for ChatBird (then reprint QR codes, update Meta and Google settings)
 - Tickets with assignee and time-to-resolve; NPS survey; AI insights from reviews

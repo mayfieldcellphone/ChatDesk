@@ -67,6 +67,17 @@ In **APIs & Services → Library**, enable all three:
 2. In ChatBird open **Integrations → Connect Google**, sign in with the account that owns your Business
    Profile, and allow access. Your locations appear, and reviews sync straight away, then every 15 minutes.
 
+### 7. For the SEO page (optional)
+1. In **APIs & Services → Library**, also enable **Business Profile Performance API** (Profile insights:
+   views, calls, searches) and **Google Search Console API**.
+2. On the OAuth consent screen (**Data access**), add the scope
+   `https://www.googleapis.com/auth/webmasters.readonly`.
+3. In ChatBird open **SEO → Search Console → Connect**. It is a separate, read-only sign-in; the Business
+   Profile connection is not touched. The website must already be in Search Console.
+4. Website check uses Google's free PageSpeed test. If it says the test is busy, create an API key
+   (Credentials → Create credentials → API key, restricted to **PageSpeed Insights API**) and save it as
+   `PAGESPEED_API_KEY` under **Integrations → Server keys**.
+
 ---
 
 ## Facebook Messenger and Instagram

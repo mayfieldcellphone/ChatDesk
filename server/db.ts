@@ -558,6 +558,8 @@ export interface Business {
   reviews_widget: string;
   special_hours: string;
   call_whisper: number;
+  seo_schema_inject: number;
+  seo_business_type: string;
   address: string;
   pricing_mode: 'off' | 'from' | 'exact';
   pricing_rules: string;
@@ -866,6 +868,33 @@ run(
 addColumn('conversations', 'assistant_paused', 'INTEGER NOT NULL DEFAULT 0');
 // Staff replies used to pause the assistant for 30 minutes (2); now only the 🤖 button pauses it.
 run('UPDATE conversations SET assistant_paused = 0 WHERE assistant_paused = 2');
+
+// ---------- SEO (seo.ts) ----------
+db.exec(`
+  -- Website checks: one row per check of one page, with every result and the to-do list.
+  CREATE TABLE IF NOT EXISTS seo_audits (
+    id TEXT PRIMARY KEY,
+    business_id TEXT NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    url TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    result TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS seo_audits_business ON seo_audits(business_id, created_at);
+  -- Google Search Console: its own sign-in (read only), separate from Business Profile.
+  CREATE TABLE IF NOT EXISTS search_console_links (
+    business_id TEXT PRIMARY KEY REFERENCES businesses(id) ON DELETE CASCADE,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT NOT NULL,
+    token_expires_at TEXT NOT NULL,
+    site_url TEXT,
+    last_error TEXT,
+    connected_at TEXT NOT NULL
+  );
+`);
+// Add the business details Google reads (schema.org JSON-LD) to the website through the chat widget.
+addColumn('businesses', 'seo_schema_inject', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('businesses', 'seo_business_type', "TEXT NOT NULL DEFAULT 'LocalBusiness'");
 
 // ---------- One-off data fixes ----------
 // Each runs once (recorded in data_fixes), after a backup copy of the database is saved next to it.
