@@ -6,7 +6,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import {
   all, get, insertMessage, newId, normalizePhone, now, run,
-  type Business, type Call, type Contact, type Conversation,
+  type Business, type Call, type Contact, type Conversation, type Message,
 } from './db';
 import { aiConfigured, anthropic } from './ai';
 import { businessKnowledge, parseTable, tagConversation } from './assistant';
@@ -21,6 +21,9 @@ import { createAppointment, parseWhen } from './bookings';
 import { sendToCustomer } from './outbound';
 import { rateLimit } from './rateLimit';
 import { publicUrl, sendSms, twiml } from './twilio';
+import { publish } from './events';
+import { pushToBusiness } from './push';
+import { callSummary } from './calls';
 
 /**
  * The AI phone receptionist. Twilio ConversationRelay turns the caller's speech into text and our
@@ -339,7 +342,9 @@ async function runTurn(session: Session, onText: (delta: string) => void, signal
     );
     let turnText = '';
     stream.on('text', (delta) => {
-      const clean = delta.replace(/[*_#`]/g, '');
+      let clean = delta.replace(/[*_#`]/g, '');
+      // Text after a tool call continues the same reply: keep a space between the two parts.
+      if (!turnText && said && clean && !/\s$/.test(said) && !/^\s/.test(clean)) clean = ` ${clean}`;
       turnText += clean;
       onText(clean);
     });
@@ -374,6 +379,20 @@ function finishCall(session: Session, call: Call, startedAt: number) {
     const body = `AI receptionist call transcript\n\n${session.transcript.join('\n')}`.slice(0, 6000);
     insertMessage(session.conversation, 'out', 'sms', body, { assistant: true });
   }
+  // A call the AI took should be seen: a first-time caller's conversation starts out closed, and the
+  // AI's own messages don't count as unread, so reopen it, mark it unread and send a notification.
+  const conversation = session.conversation;
+  run("UPDATE conversations SET status = 'open', unread_count = unread_count + 1 WHERE id = ?", conversation.id);
+  const latest = get<Message>('SELECT * FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1', conversation.id);
+  if (latest) publish(`biz:${session.business.id}`, { type: 'message', conversationId: conversation.id, message: { ...latest, author_name: null } });
+  const who = session.contact?.name || session.callerNumber || 'A caller';
+  const heard = session.transcript.filter((l) => l.startsWith('Caller: ')).map((l) => l.slice(8)).join(' ');
+  pushToBusiness(session.business.id, {
+    title: `🤖 ${callSummary({ status: 'answered', has_voicemail: 0, duration: seconds, ai_handled: 1, ai_outcome: outcome })} · ${who}`,
+    body: (heard || 'Tap to read the call transcript.').slice(0, 200),
+    url: `/?business=${session.business.id}&conversation=${conversation.id}`,
+    tag: `conv-${conversation.id}`,
+  }).catch((err) => console.error('Push failed:', err));
 }
 
 function handleRelay(ws: WebSocket, call: Call) {
@@ -434,14 +453,28 @@ function handleRelay(ws: WebSocket, call: Call) {
       }
     }, FIRST_WORDS_MS);
     try {
+      // Speak in phrases, not word fragments: the voice sounds smoother and doesn't stop and start.
+      let buffer = '';
+      const flush = (upTo = buffer.length) => {
+        const chunk = buffer.slice(0, upTo);
+        buffer = buffer.slice(upTo);
+        if (!chunk || controller.signal.aborted) return;
+        spoken += chunk;
+        send({ type: 'text', token: chunk, last: false });
+      };
       const said = await runTurn(session, (delta) => {
         if (!delta) return;
         gotWords = true;
-        spoken += delta;
-        send({ type: 'text', token: delta, last: false });
+        buffer += delta;
+        // The end of the last clause (punctuation then a space, so "$1.50" isn't split), or a long run without one.
+        let cut = -1;
+        for (const m of buffer.matchAll(/[.!?;:,](?=\s)/g)) cut = m.index! + 1;
+        if (cut >= 12) flush(cut);
+        else if (buffer.length > 140) flush(buffer.lastIndexOf(' ') > 40 ? buffer.lastIndexOf(' ') : buffer.length);
       }, controller.signal);
       clearTimeout(watchdog);
       if (controller.signal.aborted) return;
+      flush();
       send({ type: 'text', token: '', last: true });
       if (said) session.transcript.push(`Receptionist: ${said}`);
       if (session.pending) end(session.pending, said);

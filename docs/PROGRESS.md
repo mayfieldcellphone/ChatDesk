@@ -4,7 +4,7 @@ The one place to see where ChatBird is up to. Keep it short and current: update 
 every working session (Claude does this when asked, see CLAUDE.md). The printable folder version is
 made from the same information.
 
-Last updated: 16 Nov 2026
+Last updated: 18 Nov 2026
 
 ## Where things stand
 
@@ -58,6 +58,13 @@ Last updated: 16 Nov 2026
 - **Google Cloud is ready** (16 Nov 2026, project ChatDesk): both APIs on, `webmasters.readonly` scope added.
   Search Console: use the verified URL-prefix property `https://mayfieldphonerepair.com.au/` (the Domain
   property isn't verified; ChatBird skips it).
+
+## On the work branch, not yet on main (18 Nov 2026)
+
+- **AI receptionist calls now show up:** a first-time caller's call used to land in Closed with nothing
+  unread. Now it's in Open, unread, with a phone notification.
+- **Smoother AI voice:** replies are sent in whole phrases instead of word by word, and the space
+  between two parts of a reply is no longer lost.
 
 ## What ChatBird does (v1.0)
 
@@ -123,6 +130,7 @@ Add-ons: extra location A$39, 1,000 texts A$90, receptionist minutes A$0.25.
 
 | Date | Decision | Why |
 |---|---|---|
+| 18 Nov 2026 | Every AI receptionist call is marked unread and notified | The owner must see what the AI told callers |
 | 16 Nov 2026 | Search Console has its own read-only sign-in | Adding a scope to the Business Profile sign-in could break reviews if Google refused it |
 | 16 Nov 2026 | Website schema added by the chat widget is off by default | Some sites already have their own; the owner chooses |
 | Nov 2026 | Reminders on by default; automatic no-show texts off by default | A wrong “we missed you” text to someone in the shop is worse than none |
