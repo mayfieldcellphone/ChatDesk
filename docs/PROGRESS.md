@@ -8,7 +8,7 @@ Last updated: 18 Nov 2026
 
 ## Where things stand
 
-- **ChatBird v1.2** runs Mayfield Phone Repair (Birdeye cancelled). v1.0 = commit `2d023d1`; v1.1 (who's calling, bookings with reminders) merged to `main` on 14 Nov 2026; v1.2 (SEO page) on 16 Nov 2026.
+- **ChatBird v1.3** runs Mayfield Phone Repair (Birdeye cancelled). v1.0 = commit `2d023d1`; v1.1 (who's calling, bookings with reminders) merged to `main` on 14 Nov 2026; v1.2 (SEO page) on 16 Nov 2026; v1.3 (AI receptionist fixes) on 18 Nov 2026.
 - **Branches:** `main` is the tested version Mayfield runs. New work happens on other branches and only reaches `main` when the owner says “merge”.
 - **Live server:** Hostinger VPS, folder `/opt/chatdesk`, address https://chatdesk.31-97-66-240.sslip.io
 - **Mayfield stays on v1.0** while ChatBird is made into a product. Only update it after a new
@@ -59,7 +59,7 @@ Last updated: 18 Nov 2026
   Search Console: use the verified URL-prefix property `https://mayfieldphonerepair.com.au/` (the Domain
   property isn't verified; ChatBird skips it).
 
-## On the work branch, not yet on main (18 Nov 2026)
+## Added in v1.3 (18 Nov 2026, on main)
 
 - **AI receptionist calls now show up:** a first-time caller's call used to land in Closed with nothing
   unread. Now it's in Open, unread, with a phone notification.
