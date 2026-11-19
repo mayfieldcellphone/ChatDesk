@@ -1,4 +1,4 @@
-import { get, insertMessage, type Business, type Channel, type Connection, type Contact, type Conversation, type Message, type MessageOptions } from './db';
+import { canText, get, insertMessage, type Business, type Channel, type Connection, type Contact, type Conversation, type Message, type MessageOptions } from './db';
 import { isVisitorOnline, publish } from './events';
 import { metaConfigured, sendMetaImage, sendMetaMessage } from './meta';
 import { sendSms, smsConfigured } from './twilio';
@@ -18,7 +18,8 @@ export function replyChannels(business: Business, conversation: Conversation, co
   if (connection?.provider === 'facebook' && contact.facebook_id && metaConfigured()) channels.push('facebook');
   if (connection?.provider === 'instagram' && contact.instagram_id && metaConfigured()) channels.push('instagram');
   if (conversation.visitor_token) channels.push('webchat');
-  if (smsConfigured() && business.sms_number && contact.phone) channels.push('sms');
+  // Landlines can't get texts: leave Text out rather than let the send fail.
+  if (smsConfigured() && business.sms_number && canText(contact.phone)) channels.push('sms');
   if (emailConfigured() && contact.email) channels.push('email');
   return channels;
 }

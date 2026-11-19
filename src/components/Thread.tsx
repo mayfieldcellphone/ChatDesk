@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { api, CHANNEL_LABELS, fillReply, type Business, type Channel, type ConversationDetail, type InboxEvent, type Message, type SavedReply, type Tag } from '../api';
+import { api, canText, CHANNEL_LABELS, fillReply, type Business, type Channel, type ConversationDetail, type InboxEvent, type Message, type SavedReply, type Tag } from '../api';
 import { TagMenu, TagPill } from './Tags';
 import { BookingCard, NewBooking } from './Bookings';
 
@@ -537,7 +537,12 @@ export default function Thread({ conversationId, business, lastEvent, onChanged,
         )}
         <div className="mb-2 flex flex-wrap items-center gap-2 text-xs [&_button]:whitespace-nowrap">
           <span className="text-slate-500">Reply by</span>
-          {conversation.replyChannels.length === 0 && (
+          {contact.phone && !canText(contact.phone) && (
+            <span className="text-amber-600">
+              {contact.phone} is a landline, so it can’t get texts. Call them back{conversation.replyChannels.length ? ', or reply another way' : ''}, or add their mobile to the contact.
+            </span>
+          )}
+          {conversation.replyChannels.length === 0 && !(contact.phone && !canText(contact.phone)) && (
             <span className="text-amber-600">No way to reply yet: set up texting in Settings, or connect this customer’s channel under Integrations.</span>
           )}
           {conversation.replyChannels.map((c) => (

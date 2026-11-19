@@ -790,6 +790,12 @@ export function normalizePhone(input: string | undefined | null): string | null 
   return /^\+\d{8,15}$/.test(e164) ? e164 : null;
 }
 
+/**
+ * Whether texts can reach this number. Australian landlines and 13/1300/1800 numbers can't get
+ * SMS (only +614 mobiles can); numbers from other countries are left to Twilio.
+ */
+export const canText = (phone: string | null | undefined) => Boolean(phone && (!phone.startsWith('+61') || phone.startsWith('+614')));
+
 // ---------- Tags ----------
 // Internal, colour-coded labels on conversations. Never shown to customers.
 

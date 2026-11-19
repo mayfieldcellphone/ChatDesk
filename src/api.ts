@@ -94,6 +94,9 @@ export function fillReply(body: string, contactName: string, business: Pick<Busi
   return body.replace(/\{(name|business|address|hours|phone|website|review_link)\}/gi, (_, key: string) => values[key.toLowerCase()]);
 }
 
+/** Same rule as the server: Australian numbers must be mobiles (+614) to get texts. */
+export const canText = (phone: string | null | undefined) => Boolean(phone && (!phone.startsWith('+61') || phone.startsWith('+614')));
+
 export type Channel = 'webchat' | 'sms' | 'facebook' | 'instagram' | 'email';
 
 export const CHANNEL_LABELS: Record<Channel, string> = { webchat: 'Chat', sms: 'Text', facebook: 'Messenger', instagram: 'Instagram', email: 'Email' };

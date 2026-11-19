@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { config } from './config';
+import { canText } from './db';
 
 const sid = () => config('TWILIO_ACCOUNT_SID') || '';
 const authToken = () => config('TWILIO_AUTH_TOKEN') || '';
@@ -26,6 +27,7 @@ async function post(path: string, params: Record<string, string>) {
 }
 
 export async function sendSms(from: string, to: string, body: string, mediaUrl?: string) {
+  if (!canText(to)) throw new Error(`${to} is a landline, which can't receive texts. Call them instead.`);
   await post('/Messages.json', { From: from, To: to, Body: body, ...(mediaUrl ? { MediaUrl: mediaUrl } : {}) });
 }
 

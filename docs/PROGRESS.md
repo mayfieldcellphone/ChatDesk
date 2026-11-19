@@ -4,7 +4,7 @@ The one place to see where ChatBird is up to. Keep it short and current: update 
 every working session (Claude does this when asked, see CLAUDE.md). The printable folder version is
 made from the same information.
 
-Last updated: 18 Nov 2026
+Last updated: 19 Nov 2026
 
 ## Where things stand
 
@@ -58,6 +58,12 @@ Last updated: 18 Nov 2026
 - **Google Cloud is ready** (16 Nov 2026, project ChatDesk): both APIs on, `webmasters.readonly` scope added.
   Search Console: use the verified URL-prefix property `https://mayfieldphonerepair.com.au/` (the Domain
   property isn't verified; ChatBird skips it).
+
+## On the work branch, not yet on main (19 Nov 2026)
+
+- **Landline callers:** Text is no longer offered for landline numbers (they can't get SMS); the
+  conversation says to call back or add their mobile. Missed-call texts and other automatic texts
+  skip landlines instead of failing.
 
 ## Added in v1.3 (18 Nov 2026, on main)
 

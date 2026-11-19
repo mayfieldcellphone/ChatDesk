@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import {
-  all, get, insertMessage, newId, normalizePhone, now, run,
+  all, canText, get, insertMessage, newId, normalizePhone, now, run,
   type Business, type Channel, type Contact, type Conversation,
 } from './db';
 import { requireAuth } from './auth';
@@ -118,7 +118,7 @@ unsubscribeRouter.post('/:contactId/:sig', (req, res) => {
 
 // ---------- Customers ----------
 
-const isMobile = (phone: string | null) => Boolean(phone && (!phone.startsWith('+61') || phone.startsWith('+614')));
+const isMobile = canText;
 
 // When we last heard from or wrote to them: before ChatBird (imported) or in ChatBird.
 const LAST_TOUCH = `MAX(COALESCE(c.last_contact_at, ''), COALESCE((SELECT MAX(m.created_at) FROM messages m JOIN conversations v ON v.id = m.conversation_id WHERE v.contact_id = c.id), ''))`;
